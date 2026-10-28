@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta http-equiv="Content-Security-Policy" content="default-src * 'self' 'unsafe-inline' 'unsafe-eval' data: blob: filesystem: ws: wss:; media-src * data: blob:; img-src * data: blob:; connect-src * ws: wss:;" />
+    <title>TVPlayer</title>
+    <!-- API Nativa da Samsung Smart TV (injetada automaticamente na TV física/emulador) -->
+    <script type="text/javascript" src="$WEBAPIS/webapis/webapis.js"></script>
+  </head>
+  <body>
+    <!-- Elemento para o Player Nativo Samsung AVPlay quando ativado em hardware -->
+    <object id="av-player" type="application/avplayer" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; display: none;"></object>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

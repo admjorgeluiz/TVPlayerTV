@@ -1,0 +1,16 @@
+{
+  "id": "com.jorgenascimento.tvplayer",
+  "version": "1.0.0",
+  "vendor": "Jorge Nascimento",
+  "type": "web",
+  "main": "index.html",
+  "title": "TVPlayer",
+  "icon": "icon.png",
+  "largeIcon": "tv_banner.png",
+  "resolution": "1920x1080",
+  "bgColor": "#041c32",
+  "iconColor": "#003566",
+  "disableBackHistoryAPI": true,
+  "handlesRelaunch": false,
+  "requiredACG": []
+}

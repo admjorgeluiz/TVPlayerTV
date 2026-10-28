@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+
+# Production builds
+dist/
+releases/
+*.wgt
+*.ipk
+
+# TypeScript build info
+*.tsbuildinfo
+
+# Environment & local secrets/certificates
+.env
+.env.local
+*.p12
+*.pwd
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS generated files
+Thumbs.db
+.DS_Store
+
+# Tizen temporary files
+.manifest.tmp
+.delta.lst
