@@ -1,10 +1,11 @@
-import { PlayerEngineMode, XtreamCredentials } from '../types/iptv';
+import { PlaybackProgress, PlayerEngineMode, XtreamCredentials } from '../types/iptv';
 
 const KEYS = {
   LAST_M3U_URL: 'TVPlayer_LastM3uUrl',
   XTREAM_CREDS: 'TVPlayer_XtreamCreds',
   FAVORITE_URLS: 'TVPlayer_FavoriteUrls',
   RECENT_URLS: 'TVPlayer_RecentUrls',
+  PLAYBACK_PROGRESS: 'TVPlayer_PlaybackProgress',
   PLAYER_ENGINE: 'TVPlayer_PlayerEngine',
   PARENTAL_PIN: 'TVPlayer_ParentalPin',
   SHOW_ADULT_CONTENT: 'TVPlayer_ShowAdultContent',
@@ -86,6 +87,52 @@ export const storageService = {
       // Ignorar
     }
     return updated;
+  },
+
+  getAllPlaybackProgress(): Record<string, PlaybackProgress> {
+    try {
+      const raw = localStorage.getItem(KEYS.PLAYBACK_PROGRESS);
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  },
+
+  getPlaybackProgress(url: string): PlaybackProgress | null {
+    if (!url) return null;
+    const all = this.getAllPlaybackProgress();
+    return all[url] || null;
+  },
+
+  savePlaybackProgress(progress: PlaybackProgress): void {
+    if (!progress.url) return;
+    try {
+      const all = this.getAllPlaybackProgress();
+      all[progress.url] = progress;
+
+      // Política LRU: manter no máximo os 100 itens mais recentemente assistidos (~15KB)
+      const entries = Object.entries(all);
+      if (entries.length > 100) {
+        entries.sort((a, b) => b[1].updatedAt - a[1].updatedAt);
+        const trimmed = Object.fromEntries(entries.slice(0, 100));
+        localStorage.setItem(KEYS.PLAYBACK_PROGRESS, JSON.stringify(trimmed));
+        return;
+      }
+
+      localStorage.setItem(KEYS.PLAYBACK_PROGRESS, JSON.stringify(all));
+    } catch {
+      // Ignorar erros de cota
+    }
+  },
+
+  removePlaybackProgress(url: string): void {
+    try {
+      const all = this.getAllPlaybackProgress();
+      delete all[url];
+      localStorage.setItem(KEYS.PLAYBACK_PROGRESS, JSON.stringify(all));
+    } catch {
+      // Ignorar
+    }
   },
 
   getPlayerEngine(): PlayerEngineMode {

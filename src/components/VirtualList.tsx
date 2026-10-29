@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Clapperboard, Folder, FolderOpen, Lock, Maximize2, Play, Star, Tv } from 'lucide-react';
-import { Channel, ChannelGroupSummary, SeriesFolderSummary } from '../types/iptv';
+import { Check, Clapperboard, Folder, FolderOpen, Lock, Maximize2, Play, Star, Tv } from 'lucide-react';
+import { Channel, ChannelGroupSummary, PlaybackProgress, SeriesFolderSummary } from '../types/iptv';
 
 const ITEM_HEIGHT = 68;
 const VISIBLE_BUFFER = 6;
@@ -126,6 +126,7 @@ interface VirtualMixedListProps {
   items: MixedBrowserItem[];
   activeChannelUrl?: string;
   favoriteUrls: Set<string>;
+  playbackProgressMap?: Record<string, PlaybackProgress>;
   focusedIndex: number;
   isZoneActive: boolean;
   onSelectFolder: (folder: SeriesFolderSummary, index: number) => void;
@@ -137,6 +138,7 @@ export const VirtualMixedList: React.FC<VirtualMixedListProps> = ({
   items,
   activeChannelUrl,
   favoriteUrls,
+  playbackProgressMap,
   focusedIndex,
   isZoneActive,
   onSelectFolder,
@@ -230,6 +232,9 @@ export const VirtualMixedList: React.FC<VirtualMixedListProps> = ({
       const ch = entry.channel;
       const isPlaying = activeChannelUrl === ch.url;
       const isFav = favoriteUrls.has(ch.url);
+      const progress = playbackProgressMap?.[ch.url];
+      const isCompleted = Boolean(progress?.completed);
+      const hasProgress = Boolean(progress && !progress.completed && progress.percentage > 0);
       const epTag =
         ch.seasonNumber && ch.episodeNumber
           ? `S${String(ch.seasonNumber).padStart(2, '0')}E${String(ch.episodeNumber).padStart(2, '0')}`
@@ -273,7 +278,14 @@ export const VirtualMixedList: React.FC<VirtualMixedListProps> = ({
             )}
           </div>
           <div className="item-main-text">
-            <span className="item-title">{ch.name}</span>
+            <div className="item-title-row">
+              <span className="item-title">{ch.name}</span>
+              {isCompleted && (
+                <span className="completed-badge-pill">
+                  <Check size={11} strokeWidth={3} /> Visto
+                </span>
+              )}
+            </div>
             <span className="item-subtitle">
               {isPlaying
                 ? '▶ Reproduzindo no Player ao lado'
@@ -281,6 +293,14 @@ export const VirtualMixedList: React.FC<VirtualMixedListProps> = ({
                 ? `${ch.seriesName} • Temp. ${ch.seasonNumber || 1} Ep. ${ch.episodeNumber || 1}`
                 : ch.group}
             </span>
+            {hasProgress && progress && (
+              <div className="item-playback-progress-track">
+                <div
+                  className="item-playback-progress-fill"
+                  style={{ width: `${Math.min(100, Math.max(4, progress.percentage))}%` }}
+                />
+              </div>
+            )}
           </div>
           <div className="ch-status-icons">
             {isFav && <Star size={16} fill="#f4e154" color="#f4e154" />}

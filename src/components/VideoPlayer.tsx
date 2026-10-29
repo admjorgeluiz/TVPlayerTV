@@ -18,9 +18,10 @@ import {
   QrCode,
   Sparkles,
 } from 'lucide-react';
-import { Channel, PlayerEngineMode } from '../types/iptv';
+import { Channel, PlaybackProgress, PlayerEngineMode } from '../types/iptv';
 import { tizenAVPlay } from '../services/tizenBridge';
 import { detectLanServerBaseUrl } from '../services/pairingService';
+import { storageService } from '../services/storageService';
 
 interface VideoPlayerProps {
   channel: Channel | null;
@@ -40,6 +41,7 @@ interface VideoPlayerProps {
   onOpenSettingsModal: () => void;
   onLoadDemoChannels: () => void;
   onSelectLastChannel?: (ch: Channel) => void;
+  onProgressUpdate?: (progress: PlaybackProgress) => void;
 }
 
 function formatTime(sec: number): string {
@@ -109,6 +111,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   onOpenSettingsModal,
   onLoadDemoChannels,
   onSelectLastChannel,
+  onProgressUpdate,
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -128,6 +131,112 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [showOsd, setShowOsd] = useState(true);
   const [retryCount, setRetryCount] = useState(0);
   const [lanBaseUrl, setLanBaseUrl] = useState('https://admjorgeluiz.github.io/tv');
+
+  const [resumeToast, setResumeToast] = useState<{ time: number; formatted: string } | null>(null);
+  const resumeToastTimerRef = useRef<number | null>(null);
+  const savedProgressRef = useRef<PlaybackProgress | null>(null);
+  const hasAttemptedResumeRef = useRef<boolean>(false);
+  const lastSavedWallClockRef = useRef<number>(0);
+  const latestPlaybackStateRef = useRef<{ url: string; currentTime: number; duration: number }>({
+    url: '',
+    currentTime: 0,
+    duration: 0,
+  });
+
+  useEffect(() => {
+    savedProgressRef.current = channel?.url ? storageService.getPlaybackProgress(channel.url) : null;
+    hasAttemptedResumeRef.current = false;
+    setResumeToast(null);
+    if (resumeToastTimerRef.current) {
+      window.clearTimeout(resumeToastTimerRef.current);
+    }
+  }, [channel?.url]);
+
+  const applyResumeIfEligible = (targetDuration?: number) => {
+    if (hasAttemptedResumeRef.current) return;
+    const saved = savedProgressRef.current;
+    if (!saved || saved.completed || saved.currentTime < 15) return;
+
+    if (targetDuration && targetDuration > 60) {
+      if (saved.currentTime >= targetDuration * 0.9 || targetDuration - saved.currentTime <= 150) {
+        return;
+      }
+    }
+
+    hasAttemptedResumeRef.current = true;
+    const resumeSec = saved.currentTime;
+
+    if (usingHardwareAVPlay) {
+      tizenAVPlay.seekTo(resumeSec);
+    } else if (videoRef.current) {
+      videoRef.current.currentTime = resumeSec;
+    }
+
+    setResumeToast({
+      time: resumeSec,
+      formatted: formatTime(resumeSec),
+    });
+
+    if (resumeToastTimerRef.current) {
+      window.clearTimeout(resumeToastTimerRef.current);
+    }
+    resumeToastTimerRef.current = window.setTimeout(() => {
+      setResumeToast(null);
+    }, 6000);
+  };
+
+  const handleProgressTick = (cur: number, dur: number) => {
+    setCurrentTime(cur);
+    setDuration(dur);
+
+    if (!channel?.url) return;
+    latestPlaybackStateRef.current = { url: channel.url, currentTime: cur, duration: dur };
+
+    const isVod = Number.isFinite(dur) && dur > 60 && dur < 86400;
+    if (!isVod) return;
+
+    // Regra de descarte rápido: menos de 60 segundos = zapeada/engano, não polui histórico
+    if (cur < 60) return;
+
+    const now = Date.now();
+    const isCompleted = cur / dur >= 0.9 || dur - cur <= 150;
+
+    if (isCompleted || now - lastSavedWallClockRef.current >= 5000) {
+      lastSavedWallClockRef.current = now;
+      const pct = Math.min(100, Math.round((cur / dur) * 100));
+      const prog: PlaybackProgress = {
+        url: channel.url,
+        currentTime: isCompleted ? 0 : Math.floor(cur),
+        duration: Math.floor(dur),
+        percentage: isCompleted ? 100 : pct,
+        completed: isCompleted,
+        updatedAt: now,
+      };
+      storageService.savePlaybackProgress(prog);
+      onProgressUpdate?.(prog);
+    }
+  };
+
+  const flushProgressOnExit = () => {
+    const state = latestPlaybackStateRef.current;
+    if (!state.url) return;
+    const { url, currentTime: cur, duration: dur } = state;
+    const isVod = Number.isFinite(dur) && dur > 60 && dur < 86400;
+    if (!isVod || cur < 60) return;
+
+    const isCompleted = cur / dur >= 0.9 || dur - cur <= 150;
+    const pct = Math.min(100, Math.round((cur / dur) * 100));
+    const prog: PlaybackProgress = {
+      url,
+      currentTime: isCompleted ? 0 : Math.floor(cur),
+      duration: Math.floor(dur),
+      percentage: isCompleted ? 100 : pct,
+      completed: isCompleted,
+      updatedAt: Date.now(),
+    };
+    storageService.savePlaybackProgress(prog);
+    onProgressUpdate?.(prog);
+  };
 
   useEffect(() => {
     detectLanServerBaseUrl().then((u) => setLanBaseUrl(u));
@@ -162,6 +271,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     setUsingHardwareAVPlay(false);
 
     const cleanupWebPlayers = () => {
+      flushProgressOnExit();
       if (hlsRef.current) {
         try {
           hlsRef.current.destroy();
@@ -208,10 +318,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           setIsBuffering(false);
           setIsPlaying(true);
           setErrorMsg(null);
+          applyResumeIfEligible();
         },
         onTimeUpdate: (cur, dur) => {
-          setCurrentTime(cur);
-          setDuration(dur);
+          handleProgressTick(cur, dur);
         },
         onError: (err) => {
           const hlsVariant = tryConvertXtreamToHls(targetUrl);
@@ -222,10 +332,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                 setIsBuffering(false);
                 setIsPlaying(true);
                 setErrorMsg(null);
+                applyResumeIfEligible();
               },
               onTimeUpdate: (cur, dur) => {
-                setCurrentTime(cur);
-                setDuration(dur);
+                handleProgressTick(cur, dur);
               },
               onError: (err2) => {
                 setIsBuffering(false);
@@ -377,6 +487,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     }
 
     return () => {
+      flushProgressOnExit();
       cleanupWebPlayers();
       tizenAVPlay.stop();
     };
@@ -387,6 +498,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     if (usingHardwareAVPlay) {
       const playing = tizenAVPlay.togglePause();
       setIsPlaying(playing);
+      if (!playing) flushProgressOnExit();
       return;
     }
     const video = videoRef.current;
@@ -395,6 +507,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       video.play().catch(() => {});
     } else {
       video.pause();
+      flushProgressOnExit();
     }
   };
 
@@ -421,10 +534,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
   const handleSeek = (sec: number) => {
     triggerOsd();
+    const clamped = Math.max(0, sec);
+    if (usingHardwareAVPlay) {
+      tizenAVPlay.seekTo(clamped);
+      setCurrentTime(clamped);
+      return;
+    }
     const video = videoRef.current;
     if (!video || !Number.isFinite(video.duration) || video.duration <= 0) return;
-    video.currentTime = sec;
-    setCurrentTime(sec);
+    video.currentTime = clamped;
+    setCurrentTime(clamped);
   };
 
   const isVodSeekable = Number.isFinite(duration) && duration > 60 && duration < 86400;
@@ -451,12 +570,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           if (videoRef.current?.videoHeight) {
             setResolutionLabel(`${videoRef.current.videoHeight}p`);
           }
+          applyResumeIfEligible(videoRef.current?.duration);
         }}
-        onPause={() => setIsPlaying(false)}
+        onPause={() => {
+          setIsPlaying(false);
+          flushProgressOnExit();
+        }}
         onTimeUpdate={() => {
           if (videoRef.current) {
-            setCurrentTime(videoRef.current.currentTime);
-            setDuration(videoRef.current.duration || 0);
+            handleProgressTick(videoRef.current.currentTime, videoRef.current.duration || 0);
           }
         }}
         onError={() => {
@@ -483,6 +605,28 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           }
         }}
       />
+
+      {resumeToast && (
+        <div className="resume-playback-toast">
+          <div className="resume-toast-info">
+            <RotateCcw size={16} className="resume-toast-icon" />
+            <span>
+              Retomando de <strong>{resumeToast.formatted}</strong>
+            </span>
+          </div>
+          <button
+            type="button"
+            className="resume-toast-restart-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleSeek(0);
+              setResumeToast(null);
+            }}
+          >
+            Recomeçar do Início
+          </button>
+        </div>
+      )}
 
       {numericBuffer && (
         <div className="numeric-zapping-osd">
@@ -560,8 +704,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                   }`}
                   onClick={() => onSelectLastChannel(lastWatchedChannel)}
                 >
-                  <Play size={18} fill="currentColor" /> Continuar Assistindo:{' '}
-                  {lastWatchedChannel.name}
+                  <Play size={18} fill="currentColor" />
+                  {lastWatchedChannel.isNextEpisodeSuggestion ? (
+                    <>
+                      Assistir a Seguir: <strong>{lastWatchedChannel.name}</strong>
+                    </>
+                  ) : (
+                    <>
+                      Continuar Assistindo: <strong>{lastWatchedChannel.name}</strong>
+                    </>
+                  )}
                   {isStageFocused && (
                     <span className="dpad-ok-pill" style={{ marginLeft: 8 }}>
                       OK ➔

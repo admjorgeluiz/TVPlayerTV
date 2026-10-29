@@ -343,4 +343,15 @@ export const tizenAVPlay = {
     }
     return true;
   },
+
+  seekTo(seconds: number): boolean {
+    if (!this.isAvailable()) return false;
+    try {
+      const ms = Math.max(0, Math.floor(seconds * 1000));
+      window.webapis.avplay.seekTo(ms, () => {}, () => {});
+      return true;
+    } catch {
+      return false;
+    }
+  },
 };

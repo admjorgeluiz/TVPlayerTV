@@ -22,10 +22,12 @@ import {
   Channel,
   ChannelGroupSummary,
   NavigationTab,
+  PlaybackProgress,
   PlayerEngineMode,
   SeriesFolderSummary,
   XtreamCredentials,
 } from './types/iptv';
+import { findNextEpisode } from './utils/seriesResolver';
 import {
   buildGroupSummaries,
   DEMO_CHANNELS,
@@ -110,6 +112,16 @@ export function App() {
 
   const [favoriteUrls, setFavoriteUrls] = useState<string[]>(() => storageService.getFavorites());
   const [recentUrls, setRecentUrls] = useState<string[]>(() => storageService.getRecents());
+  const [playbackProgressMap, setPlaybackProgressMap] = useState<Record<string, PlaybackProgress>>(() =>
+    storageService.getAllPlaybackProgress()
+  );
+
+  const handleProgressUpdate = useCallback((progress: PlaybackProgress) => {
+    setPlaybackProgressMap((prev) => ({
+      ...prev,
+      [progress.url]: progress,
+    }));
+  }, []);
 
   const [searchText, setSearchText] = useState<string>('');
   const [debouncedSearch, setDebouncedSearch] = useState<string>('');
@@ -307,8 +319,24 @@ export function App() {
   const lastWatchedChannel = useMemo(() => {
     if (recentUrls.length === 0 || visibleChannelsPool.length === 0) return null;
     const lastUrl = recentUrls[0];
-    return visibleChannelsPool.find((c) => c.url === lastUrl && !c.isAdult) || null;
-  }, [recentUrls, visibleChannelsPool]);
+    const found = visibleChannelsPool.find((c) => c.url === lastUrl && !c.isAdult) || null;
+    if (!found) return null;
+
+    // Se o último assistido for um episódio de série e já foi concluído (> 90%), procura o próximo episódio!
+    const progress = playbackProgressMap[found.url];
+    if (progress?.completed && found.seriesName) {
+      const nextEp = findNextEpisode(found, allChannels);
+      if (nextEp && !nextEp.isAdult) {
+        return {
+          ...nextEp,
+          isNextEpisodeSuggestion: true,
+          previousEpisodeName: found.name,
+        };
+      }
+    }
+
+    return found;
+  }, [recentUrls, visibleChannelsPool, playbackProgressMap, allChannels]);
 
   /**
    * Constrói os itens visíveis na lista (Pastas de Séries S01E01, Pastas de Temporadas ou Canais/Episódios)
@@ -1539,6 +1567,7 @@ export function App() {
                   items={mixedItemsInView}
                   activeChannelUrl={selectedChannel?.url}
                   favoriteUrls={favoriteSet}
+                  playbackProgressMap={playbackProgressMap}
                   focusedIndex={listFocusIndex}
                   isZoneActive={focusZone === 'list'}
                   onFocusIndex={(i) => {
@@ -1622,6 +1651,7 @@ export function App() {
           onOpenSettingsModal={() => setIsModalOpen(true)}
           onLoadDemoChannels={handleLoadDemo}
           onSelectLastChannel={(ch) => handleSelectChannel(ch)}
+          onProgressUpdate={handleProgressUpdate}
         />
       </main>
 

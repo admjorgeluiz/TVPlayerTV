@@ -10,6 +10,17 @@ export interface Channel {
   seriesName?: string;
   seasonNumber?: number;
   episodeNumber?: number;
+  isNextEpisodeSuggestion?: boolean;
+  previousEpisodeName?: string;
+}
+
+export interface PlaybackProgress {
+  url: string;
+  currentTime: number;
+  duration: number;
+  percentage: number;
+  completed: boolean;
+  updatedAt: number;
 }
 
 export interface ChannelGroupSummary {
