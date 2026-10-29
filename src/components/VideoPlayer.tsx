@@ -18,11 +18,13 @@ import {
   Smartphone,
   QrCode,
   Sparkles,
+  SkipForward,
 } from 'lucide-react';
 import { Channel, PlaybackProgress, PlayerEngineMode } from '../types/iptv';
 import { isTizenTV, isWebOSTV, tizenAVPlay } from '../services/tizenBridge';
 import { detectLanServerBaseUrl } from '../services/pairingService';
 import { storageService } from '../services/storageService';
+import { isVodCompleted } from '../utils/seriesResolver';
 
 export interface VideoPlayerRef {
   togglePlayPause: () => void;
@@ -40,6 +42,7 @@ interface VideoPlayerProps {
   totalGroupsCount: number;
   pairingCode: string;
   lastWatchedChannel?: Channel | null;
+  nextEpisode?: Channel | null;
   isStageFocused?: boolean;
   isFullScreen: boolean;
   isFavorite: boolean;
@@ -52,6 +55,7 @@ interface VideoPlayerProps {
   onOpenSettingsModal: () => void;
   onLoadDemoChannels: () => void;
   onSelectLastChannel?: (ch: Channel) => void;
+  onSelectNextEpisode?: (ch: Channel) => void;
   onProgressUpdate?: (progress: PlaybackProgress) => void;
 }
 
@@ -160,6 +164,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
     totalGroupsCount,
     pairingCode,
     lastWatchedChannel,
+    nextEpisode,
     isStageFocused,
     isFullScreen,
     isFavorite,
@@ -172,6 +177,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
     onOpenSettingsModal,
     onLoadDemoChannels,
     onSelectLastChannel,
+    onSelectNextEpisode,
     onProgressUpdate,
   },
   ref
@@ -187,7 +193,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
   const [volume, setVolume] = useState(1);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [resolutionLabel, setResolutionLabel] = useState<string>('AUTO');
+  const [resolutionLabel, setResolutionLabel] = useState<string>('');
   const [activeEngineName, setActiveEngineName] = useState<string>('Auto Engine');
   const [usingHardwareAVPlay, setUsingHardwareAVPlay] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -206,6 +212,12 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
     currentTime: 0,
     duration: 0,
   });
+
+  // Controle de seek contínuo suave (Hold-to-repeat / múltiplos toques rápidos) sem sobrescrita
+  const pendingSeekTargetRef = useRef<number | null>(null);
+  const seekDebounceTimerRef = useRef<number | null>(null);
+  const seekLockUntilRef = useRef<number>(0);
+  const holdIntervalRef = useRef<number | null>(null);
 
   useEffect(() => {
     savedProgressRef.current =
@@ -226,7 +238,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
     if (!saved || saved.completed || saved.currentTime < 10) return;
 
     if (targetDuration && targetDuration > 30) {
-      if (saved.currentTime >= targetDuration * 0.95 || targetDuration - saved.currentTime <= 60) {
+      if (isVodCompleted(saved.currentTime, targetDuration)) {
         return;
       }
     }
@@ -264,8 +276,17 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
   };
 
   const handleProgressTick = (cur: number, dur: number) => {
-    setCurrentTime(cur);
+    if (Date.now() > seekLockUntilRef.current) {
+      setCurrentTime(cur);
+      pendingSeekTargetRef.current = null;
+    }
     setDuration(dur);
+
+    // Se estiver no Samsung AVPlay e a resolução ainda não foi capturada, consulta agora
+    if (usingHardwareAVPlay && !resolutionLabel) {
+      const detectedRes = tizenAVPlay.getVideoResolutionLabel();
+      if (detectedRes) setResolutionLabel(detectedRes);
+    }
 
     if (!channel?.url) return;
     latestPlaybackStateRef.current = { url: channel.url, currentTime: cur, duration: dur };
@@ -277,9 +298,8 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
         storageService.getPlaybackProgress(channel.url);
       if (saved && !saved.completed && saved.currentTime >= 10) {
         const durValid = Number.isFinite(dur) && dur > 30;
-        const isNotNearEnd =
-          !durValid || (saved.currentTime < dur * 0.95 && dur - saved.currentTime > 60);
-        if (cur < 4 && isNotNearEnd) {
+        const isNotCompleted = !durValid || !isVodCompleted(saved.currentTime, dur);
+        if (cur < 4 && isNotCompleted) {
           hasAttemptedResumeRef.current = true;
           if (usingHardwareAVPlay) {
             tizenAVPlay.seekTo(saved.currentTime);
@@ -309,7 +329,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
     if (cur < 10) return;
 
     const now = Date.now();
-    const isCompleted = cur / dur >= 0.9 || dur - cur <= 150;
+    const isCompleted = isVodCompleted(cur, dur);
 
     if (isCompleted || now - lastSavedWallClockRef.current >= 4000) {
       lastSavedWallClockRef.current = now;
@@ -334,7 +354,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
     const isVod = Number.isFinite(dur) && dur > 60 && dur < 86400;
     if (!isVod || cur < 10) return;
 
-    const isCompleted = cur / dur >= 0.9 || dur - cur <= 150;
+    const isCompleted = isVodCompleted(cur, dur);
     const pct = Math.min(100, Math.round((cur / dur) * 100));
     const prog: PlaybackProgress = {
       url,
@@ -377,7 +397,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
     setErrorMsg(null);
     setCurrentTime(0);
     setDuration(0);
-    setResolutionLabel('AO VIVO');
+    setResolutionLabel('');
     setUsingHardwareAVPlay(false);
 
     const cleanupWebPlayers = () => {
@@ -428,10 +448,29 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
           setIsBuffering(false);
           setIsPlaying(true);
           setErrorMsg(null);
+          const res = tizenAVPlay.getVideoResolutionLabel();
+          if (res) setResolutionLabel(res);
           applyResumeIfEligible();
         },
         onTimeUpdate: (cur, dur) => {
           handleProgressTick(cur, dur);
+        },
+        onStreamCompleted: () => {
+          if (channel?.url) {
+            const completedProg: PlaybackProgress = {
+              url: channel.url,
+              currentTime: 0,
+              duration: Math.floor(duration),
+              percentage: 100,
+              completed: true,
+              updatedAt: Date.now(),
+            };
+            storageService.savePlaybackProgress(completedProg);
+            onProgressUpdate?.(completedProg);
+          }
+          if (nextEpisode) {
+            onSelectNextEpisode?.(nextEpisode);
+          }
         },
         onError: (err) => {
           const hlsVariant = tryConvertXtreamToHls(targetUrl);
@@ -693,24 +732,71 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
 
   const handleSeek = (sec: number) => {
     triggerOsd();
-    const clamped = Math.max(0, sec);
+    const maxSec = duration > 0 ? Math.max(0, duration - 2) : 86400;
+    const clamped = Math.max(0, Math.min(maxSec, sec));
+    pendingSeekTargetRef.current = clamped;
+    seekLockUntilRef.current = Date.now() + 1500;
+    setCurrentTime(clamped);
+
     if (usingHardwareAVPlay) {
-      tizenAVPlay.seekTo(clamped);
-      setCurrentTime(clamped);
+      if (seekDebounceTimerRef.current) {
+        window.clearTimeout(seekDebounceTimerRef.current);
+      }
+      seekDebounceTimerRef.current = window.setTimeout(() => {
+        tizenAVPlay.seekTo(clamped);
+      }, 250);
       return;
     }
+
     const video = videoRef.current;
     if (!video || !Number.isFinite(video.duration) || video.duration <= 0) return;
-    video.currentTime = clamped;
-    setCurrentTime(clamped);
+    try {
+      video.currentTime = clamped;
+    } catch {}
   };
+
+  const stepSeek = (delta: number) => {
+    const base = pendingSeekTargetRef.current !== null ? pendingSeekTargetRef.current : currentTime;
+    handleSeek(base + delta);
+  };
+
+  const startContinuousSeek = (delta: number) => {
+    stepSeek(delta);
+    if (holdIntervalRef.current) {
+      clearInterval(holdIntervalRef.current);
+    }
+    holdIntervalRef.current = window.setInterval(() => {
+      stepSeek(delta);
+    }, 180);
+  };
+
+  const stopContinuousSeek = () => {
+    if (holdIntervalRef.current) {
+      clearInterval(holdIntervalRef.current);
+      holdIntervalRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    const handleGlobalKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+        stopContinuousSeek();
+      }
+    };
+    window.addEventListener('keyup', handleGlobalKeyUp);
+    return () => {
+      window.removeEventListener('keyup', handleGlobalKeyUp);
+      stopContinuousSeek();
+      if (seekDebounceTimerRef.current) window.clearTimeout(seekDebounceTimerRef.current);
+    };
+  }, []);
 
   useImperativeHandle(
     ref,
     () => ({
       togglePlayPause: handleTogglePlayPause,
       seekDelta: (delta: number) => {
-        handleSeek(Math.max(0, currentTime + delta));
+        stepSeek(delta);
         triggerOsd(4000);
       },
       showOsd: () => triggerOsd(6000),
@@ -725,6 +811,13 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
         const controlKeys = isVod
           ? (['rewind', 'play_pause', 'forward', 'favorite', 'exit_fullscreen'] as const)
           : (['prev_channel', 'play_pause', 'next_channel', 'favorite', 'exit_fullscreen'] as const);
+
+        // Se o card de próximo episódio está visível e o OSD fechado, 1x OK aciona o próximo episódio
+        const isCompletedZone = isVodCompleted(currentTime, duration);
+        if (!showOsd && nextEpisode && isCompletedZone && key === 'Enter') {
+          onSelectNextEpisode?.(nextEpisode);
+          return true;
+        }
 
         // Se o OSD está oculto (assistindo limpo em tela cheia)
         if (!showOsd) {
@@ -748,7 +841,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
           }
           if (key === 'ArrowRight') {
             if (isVod) {
-              handleSeek(currentTime + 10);
+              stepSeek(10);
               triggerOsd(4000);
               return true;
             }
@@ -756,7 +849,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
           }
           if (key === 'ArrowLeft') {
             if (isVod) {
-              handleSeek(Math.max(0, currentTime - 10));
+              stepSeek(-10);
               triggerOsd(4000);
               return true;
             }
@@ -789,9 +882,9 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
           if (selectedBtn === 'play_pause') {
             handleTogglePlayPause();
           } else if (selectedBtn === 'rewind') {
-            handleSeek(Math.max(0, currentTime - 10));
+            stepSeek(-10);
           } else if (selectedBtn === 'forward') {
-            handleSeek(currentTime + 10);
+            stepSeek(10);
           } else if (selectedBtn === 'prev_channel') {
             onChannelStep(-1);
           } else if (selectedBtn === 'next_channel') {
@@ -810,6 +903,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
     [
       handleTogglePlayPause,
       handleSeek,
+      stepSeek,
       currentTime,
       duration,
       showOsd,
@@ -860,6 +954,23 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
           setIsPlaying(false);
           flushProgressOnExit();
         }}
+        onEnded={() => {
+          if (channel?.url) {
+            const completedProg: PlaybackProgress = {
+              url: channel.url,
+              currentTime: 0,
+              duration: Math.floor(duration),
+              percentage: 100,
+              completed: true,
+              updatedAt: Date.now(),
+            };
+            storageService.savePlaybackProgress(completedProg);
+            onProgressUpdate?.(completedProg);
+          }
+          if (nextEpisode) {
+            onSelectNextEpisode?.(nextEpisode);
+          }
+        }}
         onTimeUpdate={() => {
           if (videoRef.current) {
             handleProgressTick(videoRef.current.currentTime, videoRef.current.duration || 0);
@@ -908,6 +1019,31 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
             }}
           >
             Recomeçar do Início
+          </button>
+        </div>
+      )}
+
+      {/* Card Flutuante de Próximo Episódio (Estilo Streaming / Netflix) */}
+      {channel && nextEpisode && isVodCompleted(currentTime, duration) && (
+        <div className="next-episode-floating-prompt">
+          <div className="next-ep-header">
+            <span className="next-ep-badge">PRÓXIMO EPISÓDIO</span>
+            <span className="next-ep-tag">
+              S{String(nextEpisode.seasonNumber || 1).padStart(2, '0')}E{String(nextEpisode.episodeNumber || 1).padStart(2, '0')}
+            </span>
+          </div>
+          <div className="next-ep-title">{nextEpisode.name}</div>
+          <button
+            type="button"
+            className="tv-btn primary next-ep-action-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelectNextEpisode?.(nextEpisode);
+            }}
+          >
+            <SkipForward size={18} fill="currentColor" />
+            <span>Assistir Próximo Episódio</span>
+            <span className="dpad-ok-pill">OK ➔</span>
           </button>
         </div>
       )}
@@ -1141,8 +1277,12 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
             </div>
 
             <div className="osd-badges">
-              <span className="osd-badge live">● AO VIVO</span>
-              <span className="osd-badge res">{resolutionLabel}</span>
+              {isVodSeekable || classifyIptvUrl(channel.url) === 'vod_container' ? (
+                <span className="osd-badge vod">🎬 {channel.seriesName ? 'SÉRIE' : 'VOD'}</span>
+              ) : (
+                <span className="osd-badge live">● AO VIVO</span>
+              )}
+              {resolutionLabel ? <span className="osd-badge res">{resolutionLabel}</span> : null}
               <span className="osd-badge engine">{activeEngineName}</span>
             </div>
           </div>
@@ -1172,10 +1312,10 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
                       className={`osd-ctrl-btn ${
                         isFullScreen && controlFocusIndex === 0 ? 'dpad-focused' : ''
                       }`}
-                      onClick={() => {
-                        handleSeek(Math.max(0, currentTime - 10));
-                        triggerOsd(4000);
-                      }}
+                      onClick={() => stepSeek(-10)}
+                      onMouseDown={() => startContinuousSeek(-10)}
+                      onMouseUp={stopContinuousSeek}
+                      onMouseLeave={stopContinuousSeek}
                       title="Voltar 10s (◄)"
                     >
                       <RotateCcw size={18} />
@@ -1203,10 +1343,10 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
                       className={`osd-ctrl-btn ${
                         isFullScreen && controlFocusIndex === 2 ? 'dpad-focused' : ''
                       }`}
-                      onClick={() => {
-                        handleSeek(currentTime + 10);
-                        triggerOsd(4000);
-                      }}
+                      onClick={() => stepSeek(10)}
+                      onMouseDown={() => startContinuousSeek(10)}
+                      onMouseUp={stopContinuousSeek}
+                      onMouseLeave={stopContinuousSeek}
                       title="Avançar 10s (►)"
                     >
                       <RotateCw size={18} />

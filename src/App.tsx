@@ -129,7 +129,25 @@ export function App() {
       ...prev,
       [progress.url]: progress,
     }));
-  }, []);
+
+    // Se o conteúdo VOD foi concluído (100% / > 90-95%):
+    if (progress.completed) {
+      setRecentUrls((currentRecents) => {
+        const channel = allChannels.find((c) => c.url === progress.url);
+        // Se for episódio de série, substitui na lista de Recentes pelo próximo episódio
+        if (channel?.seriesName) {
+          const nextEp = findNextEpisode(channel, allChannels);
+          if (nextEp && !nextEp.isAdult) {
+            return storageService.replaceRecent(progress.url, nextEp.url);
+          }
+          // Fim da série: remove da lista de recentes
+          return storageService.removeRecent(progress.url);
+        }
+        // Se for Filme / VOD avulso: limpa da lista de recentes
+        return storageService.removeRecent(progress.url);
+      });
+    }
+  }, [allChannels]);
 
   const [searchText, setSearchText] = useState<string>('');
   const [debouncedSearch, setDebouncedSearch] = useState<string>('');
@@ -367,12 +385,32 @@ export function App() {
       return favs.map((channel) => ({ kind: 'channel', channel }));
     }
 
-    // 2. Aba Recentes
+    // 2. Aba Recentes (oculta VODs avulsos concluídos e já troca episódios concluídos pelo próximo)
     if (activeTab === 'recent') {
       const byUrl = new Map(visibleChannelsPool.map((c) => [c.url, c]));
-      const recents = recentUrls
-        .map((u) => byUrl.get(u))
-        .filter((c): c is Channel => Boolean(c));
+      const recents: Channel[] = [];
+      for (const u of recentUrls) {
+        const ch = byUrl.get(u);
+        if (!ch) continue;
+        const prog = playbackProgressMap[ch.url] || storageService.getPlaybackProgress(ch.url);
+        // Se for episódio de série e já foi visto: sugere o próximo episódio na lista
+        if (prog?.completed && ch.seriesName) {
+          const nextEp = findNextEpisode(ch, allChannels);
+          if (nextEp && !nextEp.isAdult && !recents.some((r) => r.url === nextEp.url)) {
+            recents.push({
+              ...nextEp,
+              isNextEpisodeSuggestion: true,
+              previousEpisodeName: ch.name,
+            });
+          }
+          continue;
+        }
+        // Se for filme VOD avulso e já foi visto: não polui a lista de recentes
+        if (prog?.completed && !ch.seriesName) {
+          continue;
+        }
+        recents.push(ch);
+      }
       if (debouncedSearch.length > 0) {
         return recents
           .filter((c) => c.name.toLowerCase().includes(debouncedSearch))
@@ -593,6 +631,12 @@ export function App() {
     return 'Buscar canal, série ou categoria (OK p/ digitar)...';
   }, [selectedGroupName, selectedSeriesName, selectedSeasonNumber, activeTab]);
 
+  // Próximo episódio da série selecionada (se for uma série)
+  const nextEpisodeForSelected = useMemo(() => {
+    if (!selectedChannel || !selectedChannel.seriesName) return null;
+    return findNextEpisode(selectedChannel, allChannels);
+  }, [selectedChannel, allChannels]);
+
   // Indicador visual claro de onde está o foco do controle remoto
   const focusContextInfo = useMemo(() => {
     if (focusZone === 'stage_card') {
@@ -789,6 +833,9 @@ export function App() {
         setSelectedChannel(channel);
         const updatedRecents = storageService.addRecent(channel.url);
         setRecentUrls(updatedRecents);
+        if (activeTab === 'recent') {
+          setListFocusIndex(0);
+        }
       };
 
       if (channel.isAdult) {
@@ -1673,6 +1720,7 @@ export function App() {
           totalGroupsCount={visibleGroupSummaries.length}
           pairingCode={pairingCode}
           lastWatchedChannel={lastWatchedChannel}
+          nextEpisode={nextEpisodeForSelected}
           isStageFocused={focusZone === 'stage_card'}
           isFullScreen={isFullScreen}
           isFavorite={Boolean(selectedChannel && favoriteSet.has(selectedChannel.url))}
@@ -1693,6 +1741,11 @@ export function App() {
           onLoadDemoChannels={handleLoadDemo}
           onSelectLastChannel={(ch) => {
             handleSelectChannel(ch);
+            setIsFullScreen(true);
+            setFocusZone('fullscreen_player');
+          }}
+          onSelectNextEpisode={(ep) => {
+            handleSelectChannel(ep);
             setIsFullScreen(true);
             setFocusZone('fullscreen_player');
           }}

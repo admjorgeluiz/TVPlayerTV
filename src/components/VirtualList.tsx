@@ -257,7 +257,6 @@ export const VirtualMixedList: React.FC<VirtualMixedListProps> = ({
             onFocusIndex(i);
             onSelectChannel(ch, i);
           }}
-          onMouseEnter={() => onFocusIndex(i)}
         >
           <span className="ch-number">{epTag}</span>
           <div className="ch-logo-wrapper">

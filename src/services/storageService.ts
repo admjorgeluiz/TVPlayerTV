@@ -89,6 +89,52 @@ export const storageService = {
     return updated;
   },
 
+  removeRecent(channelUrl: string): string[] {
+    const updated = this.getRecents().filter((u) => u !== channelUrl);
+    try {
+      localStorage.setItem(KEYS.RECENT_URLS, JSON.stringify(updated));
+    } catch {
+      // Ignorar
+    }
+    return updated;
+  },
+
+  replaceRecent(oldUrl: string, newUrl: string): string[] {
+    const current = this.getRecents();
+    const result: string[] = [];
+    let replaced = false;
+    for (const u of current) {
+      if (u === oldUrl) {
+        if (!result.includes(newUrl)) {
+          result.push(newUrl);
+        }
+        replaced = true;
+      } else if (u !== newUrl) {
+        result.push(u);
+      }
+    }
+    if (!replaced && !result.includes(newUrl)) {
+      result.unshift(newUrl);
+    }
+    const updated = result.slice(0, 30);
+    try {
+      localStorage.setItem(KEYS.RECENT_URLS, JSON.stringify(updated));
+    } catch {
+      // Ignorar
+    }
+    return updated;
+  },
+
+  setRecents(urls: string[]): string[] {
+    const updated = Array.from(new Set(urls)).slice(0, 30);
+    try {
+      localStorage.setItem(KEYS.RECENT_URLS, JSON.stringify(updated));
+    } catch {
+      // Ignorar
+    }
+    return updated;
+  },
+
   getAllPlaybackProgress(): Record<string, PlaybackProgress> {
     try {
       const raw = localStorage.getItem(KEYS.PLAYBACK_PROGRESS);

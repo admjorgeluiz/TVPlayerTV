@@ -266,6 +266,38 @@ export const tizenAVPlay = {
     }
   },
 
+  activeSeekRetryTimer: null as any,
+
+  getVideoResolutionLabel(): string | null {
+    if (!this.isAvailable()) return null;
+    try {
+      const info = window.webapis?.avplay?.getCurrentStreamInfo?.();
+      if (Array.isArray(info)) {
+        for (const track of info) {
+          if (track?.type === 'VIDEO' && track.extra_info) {
+            const parsed =
+              typeof track.extra_info === 'string'
+                ? JSON.parse(track.extra_info)
+                : track.extra_info;
+            const rawHeight =
+              parsed?.Height ||
+              parsed?.height ||
+              (typeof parsed?.Resolution === 'string'
+                ? parsed.Resolution.split('x')[1]
+                : 0);
+            const h = Number(rawHeight);
+            if (Number.isFinite(h) && h > 0) {
+              return `${h}p`;
+            }
+          }
+        }
+      }
+    } catch {
+      // Ignorar se stream info ainda não estiver disponível
+    }
+    return null;
+  },
+
   play(
     url: string,
     isFullScreen: boolean,
@@ -274,10 +306,15 @@ export const tizenAVPlay = {
       onBufferingComplete?: () => void;
       onError?: (err: string) => void;
       onTimeUpdate?: (currentTimeSec: number, durationSec: number) => void;
+      onStreamCompleted?: () => void;
     }
   ): boolean {
     if (!this.isAvailable()) return false;
     try {
+      if (this.activeSeekRetryTimer) {
+        clearInterval(this.activeSeekRetryTimer);
+        this.activeSeekRetryTimer = null;
+      }
       const avObj = document.getElementById('av-player');
       if (avObj) avObj.style.display = 'block';
       document.body.classList.add('avplay-hardware-active');
@@ -309,6 +346,9 @@ export const tizenAVPlay = {
         oncurrentplaytime: (currentTimeMs: number) => {
           const durationMs = avplay.getDuration?.() || 0;
           callbacks?.onTimeUpdate?.(currentTimeMs / 1000, durationMs / 1000);
+        },
+        onstreamcompleted: () => {
+          callbacks?.onStreamCompleted?.();
         },
         onevent: () => {},
         onerror: (eventType: string) => {
@@ -375,6 +415,10 @@ export const tizenAVPlay = {
   seekTo(seconds: number, onSuccess?: () => void, onError?: (err: any) => void): boolean {
     if (!this.isAvailable()) return false;
     try {
+      if (this.activeSeekRetryTimer) {
+        clearInterval(this.activeSeekRetryTimer);
+        this.activeSeekRetryTimer = null;
+      }
       const ms = Math.max(0, Math.floor(seconds * 1000));
       const state = window.webapis.avplay.getState?.();
 
@@ -382,23 +426,26 @@ export const tizenAVPlay = {
       // Se ainda estiver em READY (durante preparação do stream), aguarda o estado estabilizar.
       if (state !== 'PLAYING' && state !== 'PAUSED') {
         let attempts = 0;
-        const retryTimer = setInterval(() => {
+        this.activeSeekRetryTimer = setInterval(() => {
           attempts++;
           try {
             const curState = window.webapis.avplay.getState?.();
             if (curState === 'PLAYING' || curState === 'PAUSED') {
-              clearInterval(retryTimer);
+              clearInterval(this.activeSeekRetryTimer);
+              this.activeSeekRetryTimer = null;
               window.webapis.avplay.seekTo(
                 ms,
                 () => onSuccess?.(),
                 (err: any) => onError?.(err)
               );
             } else if (attempts >= 25) {
-              clearInterval(retryTimer);
+              clearInterval(this.activeSeekRetryTimer);
+              this.activeSeekRetryTimer = null;
               onError?.('AVPlay seek timeout waiting for PLAYING state');
             }
           } catch (retryErr) {
-            clearInterval(retryTimer);
+            clearInterval(this.activeSeekRetryTimer);
+            this.activeSeekRetryTimer = null;
             onError?.(retryErr);
           }
         }, 150);

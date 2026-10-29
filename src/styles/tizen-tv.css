@@ -2109,5 +2109,104 @@ body.avplay-hardware-active .tizen-player-stage,
   }
 }
 
+/* ========================================================
+   CARD FLUTUANTE DE PRÓXIMO EPISÓDIO (ESTILO STREAMING)
+   ======================================================== */
+
+.next-episode-floating-prompt {
+  position: absolute;
+  bottom: 96px;
+  right: 32px;
+  z-index: 1000;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.94), rgba(30, 41, 59, 0.96));
+  border: 2px solid var(--accent-maui-purple);
+  border-radius: 16px;
+  padding: 16px 20px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.8), 0 0 24px rgba(109, 62, 242, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 340px;
+  max-width: 440px;
+  animation: slideInRightPrompt 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: auto;
+}
+
+@keyframes slideInRightPrompt {
+  from {
+    opacity: 0;
+    transform: translateX(40px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+.next-ep-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.next-ep-badge {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.15);
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.next-ep-tag {
+  font-size: 12px;
+  font-weight: 700;
+  color: #c084fc;
+}
+
+.next-ep-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #f8fafc;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.next-ep-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 18px;
+  font-size: 14px;
+  font-weight: 700;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--accent-maui-purple), #2563eb);
+  color: #fff;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 4px 16px rgba(109, 62, 242, 0.5);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.next-ep-action-btn:hover,
+.next-ep-action-btn:focus {
+  transform: scale(1.03);
+  box-shadow: 0 0 24px rgba(56, 189, 248, 0.8);
+  border-color: var(--focus-ring);
+}
+
+.osd-badge.vod {
+  background: rgba(147, 51, 234, 0.25);
+  color: #c084fc;
+  border: 1px solid rgba(147, 51, 234, 0.45);
+}
+
 
 
