@@ -19,6 +19,7 @@ import {
   QrCode,
   Sparkles,
   SkipForward,
+  SkipBack,
 } from 'lucide-react';
 import { Channel, PlaybackProgress, PlayerEngineMode } from '../types/iptv';
 import { isTizenTV, isWebOSTV, tizenAVPlay } from '../services/tizenBridge';
@@ -224,6 +225,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
   const lastSeekTimestampRef = useRef<number>(0);
   const timelineTrackRef = useRef<HTMLDivElement | null>(null);
   const autoNextEpisodeTimerRef = useRef<number | null>(null);
+  const countdownTargetTimeRef = useRef<number | null>(null);
   const isNavigatingNextEpRef = useRef<boolean>(false);
   const [autoNextCountdown, setAutoNextCountdown] = useState<number | null>(null);
 
@@ -408,46 +410,57 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
     onProgressUpdate?.(prog);
   };
 
-  // Monitora zona de encerramento do episódio para contagem regressiva automática (Estilo Netflix / Streaming)
+  // Monitora zona de encerramento do episódio para contagem regressiva automática (com precisão exata de relógio de hardware)
   useEffect(() => {
     if (!channel || !nextEpisode || duration <= 60) {
       if (autoNextEpisodeTimerRef.current) {
         clearInterval(autoNextEpisodeTimerRef.current);
         autoNextEpisodeTimerRef.current = null;
       }
+      countdownTargetTimeRef.current = null;
       setAutoNextCountdown(null);
       return;
     }
 
     const inCompletionZone = isVodCompleted(currentTime, duration);
     if (inCompletionZone && !isNavigatingNextEpRef.current) {
-      // Inicia contagem regressiva de 8 segundos se ainda não estiver ativa
-      if (autoNextCountdown === null && !autoNextEpisodeTimerRef.current) {
-        let remainingSec = 8;
-        setAutoNextCountdown(remainingSec);
+      if (!countdownTargetTimeRef.current) {
+        // Fixa o timestamp de término exatamente 8 segundos no futuro usando o relógio real do SO
+        countdownTargetTimeRef.current = Date.now() + 8000;
+        setAutoNextCountdown(8);
+
+        if (autoNextEpisodeTimerRef.current) {
+          clearInterval(autoNextEpisodeTimerRef.current);
+        }
+
+        // Ticker leve a cada 200ms calculando a diferença real em ms (imune a throttling de timers em TVs)
         autoNextEpisodeTimerRef.current = window.setInterval(() => {
-          remainingSec -= 1;
-          if (remainingSec <= 0) {
+          if (!countdownTargetTimeRef.current) return;
+          const diffMs = countdownTargetTimeRef.current - Date.now();
+          if (diffMs <= 0) {
             if (autoNextEpisodeTimerRef.current) {
               clearInterval(autoNextEpisodeTimerRef.current);
               autoNextEpisodeTimerRef.current = null;
             }
+            countdownTargetTimeRef.current = null;
             setAutoNextCountdown(null);
             handleTriggerNextEpisode();
           } else {
-            setAutoNextCountdown(remainingSec);
+            const sec = Math.ceil(diffMs / 1000);
+            setAutoNextCountdown(sec);
           }
-        }, 1000);
+        }, 200);
       }
-    } else if (!inCompletionZone && autoNextCountdown !== null) {
-      // Se o usuário retrocedeu o vídeo antes da margem de créditos, cancela a contagem
+    } else if (!inCompletionZone && countdownTargetTimeRef.current !== null) {
+      // Se o usuário retrocedeu o vídeo antes da margem de créditos, cancela a contagem imediatamente
       if (autoNextEpisodeTimerRef.current) {
         clearInterval(autoNextEpisodeTimerRef.current);
         autoNextEpisodeTimerRef.current = null;
       }
+      countdownTargetTimeRef.current = null;
       setAutoNextCountdown(null);
     }
-  }, [currentTime, duration, channel, nextEpisode, autoNextCountdown, handleTriggerNextEpisode]);
+  }, [currentTime, duration, channel, nextEpisode, handleTriggerNextEpisode]);
 
   useEffect(() => {
     return () => {
@@ -925,9 +938,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
       handleDpadNavigation: (key: string): boolean => {
         const isVod = Number.isFinite(duration) && duration > 60 && duration < 86400;
         const controlKeys = isVod
-          ? nextEpisode
-            ? (['rewind', 'play_pause', 'forward', 'next_ep', 'favorite', 'exit_fullscreen'] as const)
-            : (['rewind', 'play_pause', 'forward', 'favorite', 'exit_fullscreen'] as const)
+          ? (['restart', 'prev_step', 'rewind', 'play_pause', 'forward', 'next_step', 'favorite', 'exit_fullscreen'] as const)
           : (['prev_channel', 'play_pause', 'next_channel', 'favorite', 'exit_fullscreen'] as const);
 
         // Se o card de próximo episódio está visível e o OSD fechado, 1x OK aciona o próximo episódio
@@ -942,13 +953,13 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
           if (key === 'Enter') {
             // 1x OK: Pausa/despausa e abre a barra com o foco em Play/Pause!
             handleTogglePlayPause();
-            setControlFocusIndex(1);
+            setControlFocusIndex(isVod ? 3 : 1);
             triggerOsd(5000);
             return true;
           }
           if (key === 'ArrowDown') {
             // Seta para baixo: abre a barra de controles e foca no Play/Pause!
-            setControlFocusIndex(1);
+            setControlFocusIndex(isVod ? 3 : 1);
             triggerOsd(6000);
             return true;
           }
@@ -996,15 +1007,23 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
         }
 
         if (key === 'Enter') {
-          const selectedBtn = controlKeys[controlFocusIndex] || controlKeys[1];
+          const selectedBtn = controlKeys[controlFocusIndex] || (isVod ? controlKeys[3] : controlKeys[1]);
           if (selectedBtn === 'play_pause') {
             handleTogglePlayPause();
+          } else if (selectedBtn === 'restart') {
+            handleSeek(0, true);
+          } else if (selectedBtn === 'prev_step') {
+            onChannelStep(-1);
           } else if (selectedBtn === 'rewind') {
             stepSeek(-10);
           } else if (selectedBtn === 'forward') {
             stepSeek(10);
-          } else if (selectedBtn === 'next_ep') {
-            handleTriggerNextEpisode();
+          } else if (selectedBtn === 'next_step') {
+            if (nextEpisode) {
+              handleTriggerNextEpisode();
+            } else {
+              onChannelStep(1);
+            }
           } else if (selectedBtn === 'prev_channel') {
             onChannelStep(-1);
           } else if (selectedBtn === 'next_channel') {
@@ -1484,37 +1503,25 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
                     <button
                       type="button"
                       className={`osd-ctrl-btn ${
-                        isFullScreen &&
-                        (isVodSeekable && nextEpisode
-                          ? controlFocusIndex === 0
-                          : controlFocusIndex === 0)
-                          ? 'dpad-focused'
-                          : ''
+                        isFullScreen && controlFocusIndex === 0 ? 'dpad-focused' : ''
                       }`}
-                      onClick={() => stepSeek(-10)}
-                      onMouseDown={() => startContinuousSeek(-10)}
-                      onMouseUp={stopContinuousSeek}
-                      onMouseLeave={stopContinuousSeek}
-                      title="Voltar 10s (◄)"
+                      onClick={() => handleSeek(0, true)}
+                      title="Voltar para o início (00:00)"
                     >
-                      <RotateCcw size={18} />
-                      <span>-10s</span>
+                      <RotateCcw size={16} />
+                      <span>Início</span>
                     </button>
 
                     <button
                       type="button"
-                      className={`osd-ctrl-btn play-pause-main ${
+                      className={`osd-ctrl-btn ${
                         isFullScreen && controlFocusIndex === 1 ? 'dpad-focused' : ''
                       }`}
-                      onClick={handleTogglePlayPause}
-                      title="Play / Pause (OK)"
+                      onClick={() => onChannelStep(-1)}
+                      title={channel?.seriesName ? 'Episódio Anterior' : 'Canal Anterior'}
                     >
-                      {isPlaying ? (
-                        <Pause size={20} fill="currentColor" />
-                      ) : (
-                        <Play size={20} fill="currentColor" />
-                      )}
-                      <span>{isPlaying ? 'Pausar' : 'Reproduzir'}</span>
+                      <SkipBack size={16} />
+                      <span>{channel?.seriesName ? 'Ep -' : 'CH -'}</span>
                     </button>
 
                     <button
@@ -1522,29 +1529,85 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
                       className={`osd-ctrl-btn ${
                         isFullScreen && controlFocusIndex === 2 ? 'dpad-focused' : ''
                       }`}
+                      onClick={() => stepSeek(-10)}
+                      onMouseDown={() => startContinuousSeek(-10)}
+                      onMouseUp={stopContinuousSeek}
+                      onMouseLeave={stopContinuousSeek}
+                      title="Voltar 10s (◄)"
+                    >
+                      <span>-10s</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className={`osd-ctrl-btn play-pause-main ${
+                        isFullScreen && controlFocusIndex === 3 ? 'dpad-focused' : ''
+                      }`}
+                      onClick={handleTogglePlayPause}
+                      title="Play / Pause (OK)"
+                    >
+                      {isPlaying ? (
+                        <Pause size={22} fill="currentColor" />
+                      ) : (
+                        <Play size={22} fill="currentColor" />
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      className={`osd-ctrl-btn ${
+                        isFullScreen && controlFocusIndex === 4 ? 'dpad-focused' : ''
+                      }`}
                       onClick={() => stepSeek(10)}
                       onMouseDown={() => startContinuousSeek(10)}
                       onMouseUp={stopContinuousSeek}
                       onMouseLeave={stopContinuousSeek}
                       title="Avançar 10s (►)"
                     >
-                      <RotateCw size={18} />
                       <span>+10s</span>
                     </button>
 
-                    {nextEpisode && (
-                      <button
-                        type="button"
-                        className={`osd-ctrl-btn netflix-next-btn ${
-                          isFullScreen && controlFocusIndex === 3 ? 'dpad-focused' : ''
-                        }`}
-                        onClick={handleTriggerNextEpisode}
-                        title="Próximo Episódio (Série)"
-                      >
-                        <SkipForward size={18} fill="currentColor" />
-                        <span>Próximo Ep</span>
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      className={`osd-ctrl-btn ${
+                        isFullScreen && controlFocusIndex === 5 ? 'dpad-focused' : ''
+                      }`}
+                      onClick={() => {
+                        if (nextEpisode) {
+                          handleTriggerNextEpisode();
+                        } else {
+                          onChannelStep(1);
+                        }
+                      }}
+                      title={channel?.seriesName ? 'Próximo Episódio' : 'Próximo Canal'}
+                    >
+                      <SkipForward size={16} />
+                      <span>{channel?.seriesName ? 'Ep +' : 'CH +'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className={`osd-ctrl-btn ${isFavorite ? 'active-fav' : ''} ${
+                        isFullScreen && controlFocusIndex === 6 ? 'dpad-focused' : ''
+                      }`}
+                      onClick={onToggleFavorite}
+                      title="Favoritar Canal / Série"
+                    >
+                      <Star size={16} fill={isFavorite ? '#f4e154' : 'none'} />
+                      <span>{isFavorite ? 'Favorito' : 'Favoritar'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className={`osd-ctrl-btn primary-purple ${
+                        isFullScreen && controlFocusIndex === 7 ? 'dpad-focused' : ''
+                      }`}
+                      onClick={onToggleFullScreen}
+                      title="Lista de Canais (Voltar)"
+                    >
+                      <Minimize2 size={16} />
+                      <span>Lista</span>
+                    </button>
                   </>
                 ) : (
                   <>
@@ -1556,7 +1619,8 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
                       onClick={() => onChannelStep(-1)}
                       title="Canal Anterior (CH-)"
                     >
-                      <span>CH- Anterior</span>
+                      <SkipBack size={16} />
+                      <span>CH -</span>
                     </button>
 
                     <button
@@ -1568,11 +1632,10 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
                       title="Play / Pause (OK)"
                     >
                       {isPlaying ? (
-                        <Pause size={20} fill="currentColor" />
+                        <Pause size={22} fill="currentColor" />
                       ) : (
-                        <Play size={20} fill="currentColor" />
+                        <Play size={22} fill="currentColor" />
                       )}
-                      <span>{isPlaying ? 'Pausar' : 'Reproduzir'}</span>
                     </button>
 
                     <button
@@ -1583,44 +1646,35 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
                       onClick={() => onChannelStep(1)}
                       title="Próximo Canal (CH+)"
                     >
-                      <span>CH+ Próximo</span>
+                      <SkipForward size={16} />
+                      <span>CH +</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className={`osd-ctrl-btn ${isFavorite ? 'active-fav' : ''} ${
+                        isFullScreen && controlFocusIndex === 3 ? 'dpad-focused' : ''
+                      }`}
+                      onClick={onToggleFavorite}
+                      title="Favoritar Canal (Botão Amarelo / F3)"
+                    >
+                      <Star size={16} fill={isFavorite ? '#f4e154' : 'none'} />
+                      <span>{isFavorite ? 'Favorito' : 'Favoritar'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className={`osd-ctrl-btn primary-purple ${
+                        isFullScreen && controlFocusIndex === 4 ? 'dpad-focused' : ''
+                      }`}
+                      onClick={onToggleFullScreen}
+                      title="Lista de Canais (Voltar)"
+                    >
+                      <Minimize2 size={16} />
+                      <span>Lista</span>
                     </button>
                   </>
                 )}
-
-                <button
-                  type="button"
-                  className={`osd-ctrl-btn ${isFavorite ? 'active-fav' : ''} ${
-                    isFullScreen &&
-                    (isVodSeekable && nextEpisode
-                      ? controlFocusIndex === 4
-                      : controlFocusIndex === 3)
-                      ? 'dpad-focused'
-                      : ''
-                  }`}
-                  onClick={onToggleFavorite}
-                  title="Favoritar Canal (Botão Amarelo / F3)"
-                >
-                  <Star size={18} fill={isFavorite ? '#f4e154' : 'none'} />
-                  <span>{isFavorite ? 'Favorito' : 'Favoritar'}</span>
-                </button>
-
-                <button
-                  type="button"
-                  className={`osd-ctrl-btn primary-purple ${
-                    isFullScreen &&
-                    (isVodSeekable && nextEpisode
-                      ? controlFocusIndex === 5
-                      : controlFocusIndex === 4)
-                      ? 'dpad-focused'
-                      : ''
-                  }`}
-                  onClick={onToggleFullScreen}
-                  title="Lista de Canais (Voltar)"
-                >
-                  <Minimize2 size={18} />
-                  <span>Lista de Canais</span>
-                </button>
               </div>
 
               <div className="osd-controls-right">
