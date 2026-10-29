@@ -82,14 +82,16 @@ body,
   width: 52px;
   height: 52px;
   border-radius: 14px;
-  background: linear-gradient(135deg, var(--accent-netflix-red), #831010);
+  background: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
-  box-shadow: 0 6px 20px rgba(229, 9, 20, 0.5);
+  color: #111;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
   font-weight: 900;
   letter-spacing: 0.5px;
+  overflow: hidden;
+  padding: 2px;
 }
 
 .nav-rail-items {
@@ -2384,6 +2386,346 @@ body.avplay-hardware-active .tizen-player-stage,
   background: rgba(229, 9, 20, 0.25);
   color: #ff858d;
   border: 1px solid rgba(229, 9, 20, 0.5);
+}
+
+/* ==========================================================================
+   DESKTOP HYBRID INSTALL GATE (Bloqueio Elegante no Navegador para PWA)
+   ========================================================================== */
+.desktop-gate-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 999999;
+  background: radial-gradient(circle at center, #1c1c1c 0%, #080808 100%);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 40px 16px;
+  overflow-y: auto;
+  box-sizing: border-box;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  color: #ffffff;
+}
+
+.desktop-gate-card {
+  width: 100%;
+  max-width: 500px;
+  margin: auto;
+  background: rgba(22, 22, 22, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 22px;
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.85), 0 0 1px rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  box-sizing: border-box;
+}
+
+.desktop-gate-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.desktop-gate-logo-wrapper {
+  width: 68px;
+  height: 68px;
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 4px;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.desktop-gate-logo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 14px;
+}
+
+.desktop-gate-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(229, 9, 20, 0.15);
+  color: #ff4d58;
+  border: 1px solid rgba(229, 9, 20, 0.35);
+  border-radius: 16px;
+  padding: 4px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.desktop-gate-title {
+  font-size: 21px;
+  font-weight: 800;
+  color: #ffffff;
+  margin: 0 0 8px 0;
+  letter-spacing: -0.3px;
+}
+
+.desktop-gate-subtitle {
+  font-size: 13px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.7);
+  margin: 0 0 18px 0;
+  max-width: 440px;
+}
+
+.desktop-gate-subtitle strong {
+  color: #ffffff;
+}
+
+.desktop-gate-features {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+.desktop-gate-ip-notice {
+  background: rgba(255, 179, 0, 0.12);
+  border: 1px solid rgba(255, 179, 0, 0.35);
+  border-radius: 12px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #ffd56b;
+  text-align: left;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.desktop-gate-ip-notice strong {
+  color: #ffffff;
+}
+
+.desktop-gate-feat-item {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  gap: 10px;
+  text-align: left;
+}
+
+.desktop-gate-feat-item .feat-icon {
+  color: #e50914;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.desktop-gate-feat-item strong {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 2px;
+}
+
+.desktop-gate-feat-item p {
+  font-size: 11px;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.55);
+  margin: 0;
+}
+
+/* Guia visual da barra de URL */
+.desktop-gate-guide-box {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-sizing: border-box;
+}
+
+.desktop-gate-browser-mock {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #141414;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 6px 10px;
+}
+
+.mock-dots {
+  display: flex;
+  gap: 5px;
+}
+
+.mock-dots .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.mock-dots .dot-red { background: #ff5f56; }
+.mock-dots .dot-yellow { background: #ffbd2e; }
+.mock-dots .dot-green { background: #27c93f; }
+
+.mock-url-bar {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.mock-lock {
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+.mock-url {
+  flex: 1;
+  color: rgba(255, 255, 255, 0.65);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+}
+
+.mock-install-target {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #e50914;
+  color: #ffffff;
+  padding: 3px 8px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: 0 0 12px rgba(229, 9, 20, 0.7);
+  animation: pulseTarget 1.8s infinite;
+}
+
+@keyframes pulseTarget {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.06); box-shadow: 0 0 18px rgba(229, 9, 20, 0.9); }
+  100% { transform: scale(1); }
+}
+
+.desktop-gate-guide-text {
+  font-size: 12px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.8);
+  margin: 0;
+  text-align: center;
+}
+
+.desktop-gate-guide-text strong {
+  color: #ffb300;
+}
+
+.desktop-gate-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 14px;
+}
+
+.desktop-gate-btn-primary {
+  background: #e50914;
+  color: #ffffff;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 20px;
+  font-size: 14px;
+  font-weight: 750;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(229, 9, 20, 0.45);
+  transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.desktop-gate-btn-primary:hover,
+.desktop-gate-btn-primary:focus {
+  background: #f40612;
+  transform: scale(1.02);
+  box-shadow: 0 8px 24px rgba(229, 9, 20, 0.6);
+}
+
+.desktop-gate-btn-secondary {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  padding: 11px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.desktop-gate-btn-secondary:hover,
+.desktop-gate-btn-secondary:focus {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.28);
+  transform: scale(1.01);
+}
+
+.desktop-gate-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.desktop-gate-verify-btn {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 11px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  transition: color 0.15s ease;
+}
+
+.desktop-gate-verify-btn:hover {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+@media (max-width: 520px) {
+  .desktop-gate-features {
+    grid-template-columns: 1fr;
+  }
+  .desktop-gate-card {
+    padding: 22px 18px;
+  }
 }
 
 

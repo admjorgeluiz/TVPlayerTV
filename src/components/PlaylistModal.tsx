@@ -171,7 +171,7 @@ export const PlaylistModal: React.FC<PlaylistModalProps> = ({
             <img
               src="./icon.png"
               alt="TVPlayer"
-              style={{ width: 42, height: 42, borderRadius: 10 }}
+              style={{ width: 42, height: 42, borderRadius: 10, backgroundColor: '#ffffff', objectFit: 'contain' }}
             />
             <div>
               <h2>Configurações, QR Code &amp; Controle Parental (+18)</h2>

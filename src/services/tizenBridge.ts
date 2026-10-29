@@ -114,6 +114,24 @@ export function isWebOSTV(): boolean {
   return /Web0S|webOS|SmartTV.*LG|NetCast/i.test(ua);
 }
 
+export function isSmartTV(): boolean {
+  if (isTizenTV() || isWebOSTV()) return true;
+  if (typeof window === 'undefined') return false;
+  const ua = navigator?.userAgent || '';
+  return /Tizen|Web0S|webOS|SmartTV|HbbTV|VIDAA|Roku|AppleTV|Android TV|BRAVIA|Hisense/i.test(ua);
+}
+
+export function isInstalledPWA(): boolean {
+  if (typeof window === 'undefined') return false;
+  return Boolean(
+    window.matchMedia?.('(display-mode: standalone)').matches ||
+    window.matchMedia?.('(display-mode: window-controls-overlay)').matches ||
+    (window.navigator as any).standalone === true ||
+    window.location.search.includes('source=pwa') ||
+    document.referrer.includes('android-app://')
+  );
+}
+
 let cachedWebOSModel = 'LG Smart TV';
 let cachedWebOSVersion = 'webOS TV';
 

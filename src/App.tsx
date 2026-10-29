@@ -58,6 +58,7 @@ import {
 import { VideoPlayer, VideoPlayerRef } from './components/VideoPlayer';
 import { PlaylistModal } from './components/PlaylistModal';
 import { MobileRemoteSetup } from './components/MobileRemoteSetup';
+import { DesktopInstallGate } from './components/DesktopInstallGate';
 import { ParentalPinModal, PinModalMode } from './components/ParentalPinModal';
 
 type FocusZone =
@@ -1357,7 +1358,8 @@ export function App() {
       : 'HLS.js + HTML5';
 
   return (
-    <div className={`tizen-app-shell ${isFullScreen ? 'mode-fullscreen' : 'mode-split'}`}>
+    <DesktopInstallGate>
+      <div className={`tizen-app-shell ${isFullScreen ? 'mode-fullscreen' : 'mode-split'}`}>
       {!isFullScreen && (
         <aside className="tizen-sidebar-panel">
           <nav className="tizen-nav-rail">
@@ -1365,7 +1367,7 @@ export function App() {
               <img
                 src="./icon.png"
                 alt="TVPlayer"
-                style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 12 }}
+                style={{ width: '100%', height: '100%', objectFit: 'contain', backgroundColor: '#ffffff', borderRadius: 10 }}
               />
             </div>
 
@@ -1830,6 +1832,7 @@ export function App() {
         onCancel={() => setPinRequest(null)}
       />
     </div>
+    </DesktopInstallGate>
   );
 }
 
