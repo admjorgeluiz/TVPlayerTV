@@ -314,62 +314,64 @@ export function App() {
    * Constrói os itens visíveis na lista (Pastas de Séries S01E01, Pastas de Temporadas ou Canais/Episódios)
    */
   const mixedItemsInView = useMemo<MixedBrowserItem[]>(() => {
-    // 1. Modo de Busca Global: se o usuário digitou na busca, mostra Pastas de Séries encontradas + Canais encontrados
-    if (debouncedSearch.length > 0) {
-      const matchedChannels = visibleChannelsPool.filter(
-        (c) =>
-          c.name.toLowerCase().includes(debouncedSearch) ||
-          c.group.toLowerCase().includes(debouncedSearch) ||
-          (c.seriesName && c.seriesName.toLowerCase().includes(debouncedSearch))
-      );
-
-      // Se estamos dentro de um grupo específico sem série selecionada, agrupa séries na busca também
-      if (selectedGroupName && !selectedSeriesName) {
-        const inGroup = matchedChannels.filter(
-          (c) => (c.group || 'Sem Grupo') === selectedGroupName
-        );
-        return buildMixedFolderAndChannelItems(inGroup);
-      }
-
-      return matchedChannels.map((channel) => ({ kind: 'channel', channel }));
-    }
-
-    // 2. Aba Favoritos
+    // 1. Aba Favoritos
     if (activeTab === 'favorites') {
-      return visibleChannelsPool
-        .filter((c) => favoriteSet.has(c.url))
-        .map((channel) => ({ kind: 'channel', channel }));
+      const favs = visibleChannelsPool.filter((c) => favoriteSet.has(c.url));
+      if (debouncedSearch.length > 0) {
+        return favs
+          .filter((c) => c.name.toLowerCase().includes(debouncedSearch))
+          .map((channel) => ({ kind: 'channel', channel }));
+      }
+      return favs.map((channel) => ({ kind: 'channel', channel }));
     }
 
-    // 3. Aba Recentes
+    // 2. Aba Recentes
     if (activeTab === 'recent') {
       const byUrl = new Map(visibleChannelsPool.map((c) => [c.url, c]));
-      return recentUrls
+      const recents = recentUrls
         .map((u) => byUrl.get(u))
-        .filter((c): c is Channel => Boolean(c))
-        .map((channel) => ({ kind: 'channel', channel }));
+        .filter((c): c is Channel => Boolean(c));
+      if (debouncedSearch.length > 0) {
+        return recents
+          .filter((c) => c.name.toLowerCase().includes(debouncedSearch))
+          .map((channel) => ({ kind: 'channel', channel }));
+      }
+      return recents.map((channel) => ({ kind: 'channel', channel }));
     }
 
-    // 4. Aba Todos os Canais
+    // 3. Aba Todos os Canais
     if (activeTab === 'channels') {
+      if (debouncedSearch.length > 0) {
+        return visibleChannelsPool
+          .filter(
+            (c) =>
+              c.name.toLowerCase().includes(debouncedSearch) ||
+              c.group.toLowerCase().includes(debouncedSearch)
+          )
+          .map((channel) => ({ kind: 'channel', channel }));
+      }
       return visibleChannelsPool.map((channel) => ({ kind: 'channel', channel }));
     }
 
-    // 5. Dentro de uma Categoria (selectedGroupName) -> Organiza vídeos S01E01 em Pastas de Séries e Temporadas!
+    // 4. Dentro de uma Categoria (selectedGroupName) -> Organiza vídeos S01E01 em Pastas de Séries e Temporadas!
     if (selectedGroupName) {
       const groupChannels = visibleChannelsPool.filter(
         (c) => (c.group || 'Sem Grupo') === selectedGroupName
       );
 
-      // Nível 3: Usuário abriu uma Série E escolheu uma Temporada específica -> Mostra episódios daquela temporada ordenados!
+      // Nível 3: Usuário abriu uma Série E escolheu uma Temporada específica -> Mostra episódios daquela temporada!
       if (selectedSeriesName && selectedSeasonNumber !== null) {
-        const episodes = groupChannels
+        let episodes = groupChannels
           .filter(
             (c) =>
               c.seriesName === selectedSeriesName &&
               (c.seasonNumber || 1) === selectedSeasonNumber
           )
           .sort((a, b) => (a.episodeNumber || 0) - (b.episodeNumber || 0));
+
+        if (debouncedSearch.length > 0) {
+          episodes = episodes.filter((c) => c.name.toLowerCase().includes(debouncedSearch));
+        }
 
         return episodes.map((channel) => ({ kind: 'channel', channel }));
       }
@@ -386,10 +388,10 @@ export function App() {
           seasonsMap.set(sNum, list);
         }
 
-        // Se a série tem 2 ou mais temporadas (ex: S01, S02), exibe as Pastas de Temporadas!
+        // Se a série tem 2 ou mais temporadas (ex: S01, S02)
         if (seasonsMap.size > 1) {
           const sortedSeasons = Array.from(seasonsMap.entries()).sort((a, b) => a[0] - b[0]);
-          return sortedSeasons.map(([seasonNum, eps]) => ({
+          let seasonFolders: MixedBrowserItem[] = sortedSeasons.map(([seasonNum, eps]) => ({
             kind: 'folder',
             folder: {
               type: 'season_folder',
@@ -400,17 +402,55 @@ export function App() {
               seasonNumber: seasonNum,
             },
           }));
+
+          if (debouncedSearch.length > 0) {
+            seasonFolders = seasonFolders.filter(
+              (f) =>
+                f.kind === 'folder' &&
+                (f.folder.name.toLowerCase().includes(debouncedSearch) ||
+                  f.folder.subtitle.toLowerCase().includes(debouncedSearch))
+            );
+          }
+
+          return seasonFolders;
         }
 
-        // Se a série tem apenas 1 temporada, já lista todos os episódios em ordem numérica (E01, E02...)!
-        const sortedEpisodes = [...seriesEpisodes].sort(
+        // Se a série tem apenas 1 temporada, lista todos os episódios em ordem numérica
+        let sortedEpisodes = [...seriesEpisodes].sort(
           (a, b) => (a.episodeNumber || 0) - (b.episodeNumber || 0)
         );
+
+        if (debouncedSearch.length > 0) {
+          sortedEpisodes = sortedEpisodes.filter((c) =>
+            c.name.toLowerCase().includes(debouncedSearch)
+          );
+        }
+
         return sortedEpisodes.map((channel) => ({ kind: 'channel', channel }));
       }
 
-      // Nível 1: Dentro da Categoria -> Agrupa todos os vídeos S01E01 em Pastas por Nome da Série!
+      // Nível 1: Dentro da Categoria -> Se buscou, filtra apenas canais DESTE grupo
+      if (debouncedSearch.length > 0) {
+        const matchedInGroup = groupChannels.filter(
+          (c) =>
+            c.name.toLowerCase().includes(debouncedSearch) ||
+            (c.seriesName && c.seriesName.toLowerCase().includes(debouncedSearch))
+        );
+        return buildMixedFolderAndChannelItems(matchedInGroup);
+      }
+
       return buildMixedFolderAndChannelItems(groupChannels);
+    }
+
+    // 5. Se nenhuma categoria/pasta estiver aberta e o usuário buscou: busca global completa
+    if (debouncedSearch.length > 0) {
+      const matchedChannels = visibleChannelsPool.filter(
+        (c) =>
+          c.name.toLowerCase().includes(debouncedSearch) ||
+          c.group.toLowerCase().includes(debouncedSearch) ||
+          (c.seriesName && c.seriesName.toLowerCase().includes(debouncedSearch))
+      );
+      return matchedChannels.map((channel) => ({ kind: 'channel', channel }));
     }
 
     return visibleChannelsPool.map((channel) => ({ kind: 'channel', channel }));
@@ -440,6 +480,15 @@ export function App() {
       return 'Configuração Inicial';
     }
     if (debouncedSearch.length > 0) {
+      if (selectedGroupName) {
+        if (selectedSeriesName && selectedSeasonNumber !== null) {
+          return `Busca em ${selectedSeriesName} (T${selectedSeasonNumber}): "${searchText}" (${mixedItemsInView.length})`;
+        }
+        if (selectedSeriesName) {
+          return `Busca em ${selectedSeriesName}: "${searchText}" (${mixedItemsInView.length})`;
+        }
+        return `Busca em ${selectedGroupName}: "${searchText}" (${mixedItemsInView.length})`;
+      }
       return `Busca: "${searchText}" (${mixedItemsInView.length})`;
     }
     if (activeTab === 'favorites') {
@@ -485,6 +534,22 @@ export function App() {
     }
     return '◄ Voltar às Categorias';
   }, [selectedGroupName, selectedSeriesName, selectedSeasonNumber]);
+
+  // Placeholder contextual para a busca de acordo com o nível aberto
+  const searchPlaceholder = useMemo(() => {
+    if (selectedGroupName) {
+      if (selectedSeriesName && selectedSeasonNumber !== null) {
+        return `Buscar na T${selectedSeasonNumber} de ${selectedSeriesName}...`;
+      }
+      if (selectedSeriesName) {
+        return `Buscar em ${selectedSeriesName}...`;
+      }
+      return `Buscar em ${selectedGroupName}...`;
+    }
+    if (activeTab === 'favorites') return 'Buscar nos Favoritos...';
+    if (activeTab === 'recent') return 'Buscar nos Recentes...';
+    return 'Buscar canal, série ou categoria (OK p/ digitar)...';
+  }, [selectedGroupName, selectedSeriesName, selectedSeasonNumber, activeTab]);
 
   // Indicador visual claro de onde está o foco do controle remoto
   const focusContextInfo = useMemo(() => {
@@ -647,12 +712,16 @@ export function App() {
   const handleStepBackHierarchy = useCallback(() => {
     if (selectedSeasonNumber !== null) {
       setSelectedSeasonNumber(null);
+      setSearchText('');
+      setDebouncedSearch('');
       setListFocusIndex(0);
       setFocusZone('list');
       return;
     }
     if (selectedSeriesName !== null) {
       setSelectedSeriesName(null);
+      setSearchText('');
+      setDebouncedSearch('');
       setListFocusIndex(0);
       setFocusZone('list');
       return;
@@ -1240,7 +1309,7 @@ export function App() {
                 <input
                   ref={searchInputRef}
                   type="text"
-                  placeholder="Buscar canal, série ou categoria (OK p/ digitar)..."
+                  placeholder={searchPlaceholder}
                   value={searchText}
                   onChange={(e) => setSearchText(e.target.value)}
                   onFocus={() => setFocusZone('search_input')}
