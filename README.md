@@ -9,6 +9,7 @@
 </p>
 
 <p align="center">
+  <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" />
   <img src="https://img.shields.io/badge/Samsung_Tizen-8.0_Ready-blue?logo=tizen" alt="Samsung Tizen" />
   <img src="https://img.shields.io/badge/LG_webOS-Compatible-red?logo=lg" alt="LG webOS" />
   <img src="https://img.shields.io/badge/Desktop-PWA_Standalone-success?logo=googlechrome" alt="Desktop PWA" />
@@ -188,6 +189,7 @@ O TVPlayer possui suporte total a **PWA (Progressive Web App)**:
 
 ---
 
-## 📄 Licença e Autoria
-Desenvolvido por **Jorge Nascimento** ([@admjorgeluiz](https://github.com/admjorgeluiz)).  
-Todos os direitos reservados.
+## 📄 Licença
+Este projeto está licenciado sob os termos da licença [MIT](LICENSE).
+
+Desenvolvido por **Jorge Nascimento** ([@admjorgeluiz](https://github.com/admjorgeluiz)).
