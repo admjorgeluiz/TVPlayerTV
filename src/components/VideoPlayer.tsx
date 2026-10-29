@@ -19,7 +19,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { Channel, PlaybackProgress, PlayerEngineMode } from '../types/iptv';
-import { tizenAVPlay } from '../services/tizenBridge';
+import { isTizenTV, isWebOSTV, tizenAVPlay } from '../services/tizenBridge';
 import { detectLanServerBaseUrl } from '../services/pairingService';
 import { storageService } from '../services/storageService';
 
@@ -91,6 +91,55 @@ function tryConvertXtreamToHls(url: string): string | null {
     // Ignorar
   }
   return null;
+}
+
+export function getPlatformDisplayName(): string {
+  if (isWebOSTV()) return 'LG webOS';
+  if (isTizenTV()) return 'Samsung Tizen';
+  return 'Web / PC';
+}
+
+export function formatPlatformError(
+  errorType: 'mpegts' | 'hls' | 'direct_codec' | 'html5_error' | 'avplay',
+  streamUrl: string,
+  extraDetail?: string
+): string {
+  const platform = getPlatformDisplayName();
+  const urlSnippet = streamUrl ? streamUrl.split('?')[0].split('/').slice(-2).join('/') : '';
+
+  if (isWebOSTV()) {
+    switch (errorType) {
+      case 'mpegts':
+      case 'direct_codec':
+        return `[LG webOS] Não foi possível decodificar este canal (${urlSnippet || 'MPEG-TS'}). O servidor IPTV não autorizou o streaming ou o codec de vídeo/áudio é incompatível com o webOS. Detalhe: ${extraDetail || 'formato recusado'}.`;
+      case 'hls':
+        return `[LG webOS] Erro no stream HLS (${urlSnippet}). O canal parece offline ou com instabilidade na transmissão.`;
+      default:
+        return `[LG webOS] O canal não pôde ser reproduzido pela TV LG (${extraDetail || 'formato de stream recusado ou link offline'}).`;
+    }
+  }
+
+  if (isTizenTV()) {
+    switch (errorType) {
+      case 'mpegts':
+      case 'avplay':
+        return `[Samsung Tizen] Falha na reprodução via decodificador AVPlay (${urlSnippet}). O canal pode estar offline no servidor ou o codec é incompatível com o Tizen. Detalhe: ${extraDetail || 'erro no decodificador'}.`;
+      case 'hls':
+        return `[Samsung Tizen] Erro no stream HLS (${urlSnippet}). Canal offline ou temporariamente fora do ar.`;
+      default:
+        return `[Samsung Tizen] O canal não pôde ser reproduzido pelo motor da TV Samsung (${extraDetail || 'canal offline'}).`;
+    }
+  }
+
+  // Navegador / Desktop / PC
+  switch (errorType) {
+    case 'mpegts':
+      return `[Navegador PC] Bloqueio de CORS/MPEG-TS: Este canal transmite em MPEG-TS bruto sem autorização CORS para navegadores de PC. Em Smart TVs (Samsung / LG), o decodificador nativo é acionado automaticamente.`;
+    case 'hls':
+      return `[Navegador PC] Erro HLS: O servidor da lista não possui cabeçalho CORS ou o canal está offline.`;
+    default:
+      return `[Navegador PC] Formato não suportado diretamente pelo navegador (${extraDetail || 'exige decodificador nativo da Smart TV'}).`;
+  }
 }
 
 export const VideoPlayer: React.FC<VideoPlayerProps> = ({
@@ -339,13 +388,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
               },
               onError: (err2) => {
                 setIsBuffering(false);
-                setErrorMsg(`Canal offline no servidor ou formato indisponível (${err2})`);
+                setErrorMsg(formatPlatformError('avplay', targetUrl, String(err2)));
               },
             });
             return;
           }
           setIsBuffering(false);
-          setErrorMsg(`Canal offline ou indisponível no servidor (${err})`);
+          setErrorMsg(formatPlatformError('avplay', targetUrl, String(err)));
         },
       });
     };
@@ -396,8 +445,18 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           if (allowFallbackToAVPlay && startHardwareAVPlay(streamUrl)) {
             return;
           }
+          if (video) {
+            setActiveEngineName(isWebOSTV() ? 'LG webOS Native Player' : 'HTML5 Direct Video');
+            video.src = targetUrl;
+            video.load();
+            video.play().catch(() => {
+              setIsBuffering(false);
+              setErrorMsg(formatPlatformError('hls', targetUrl, data.details));
+            });
+            return;
+          }
           setIsBuffering(false);
-          setErrorMsg('Canal indisponível ou bloqueado por CORS neste motor.');
+          setErrorMsg(formatPlatformError('hls', targetUrl, data.details));
         }
       });
 
@@ -433,7 +492,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           playPromise.catch(() => {});
         }
 
-        player.on(mpegts.Events.ERROR, () => {
+        player.on(mpegts.Events.ERROR, (_event, errType, errDetail) => {
           if (tizenAVPlay.isAvailable() && startHardwareAVPlay(streamUrl)) {
             return;
           }
@@ -441,9 +500,27 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           if (hlsUrl && startHlsEngine(hlsUrl, true)) {
             return;
           }
+          // Na TV LG webOS, o elemento <video src="..."> nativo contorna restrições de CORS do JavaScript
+          if (video) {
+            cleanupWebPlayers();
+            setActiveEngineName(isWebOSTV() ? 'LG webOS Native Player' : 'HTML5 Direct Video');
+            video.src = targetUrl;
+            video.load();
+            video.play().catch((playErr) => {
+              setIsBuffering(false);
+              setErrorMsg(
+                formatPlatformError(
+                  'mpegts',
+                  targetUrl,
+                  `${errType || ''}: ${errDetail || ''} / ${playErr?.message || ''}`
+                )
+              );
+            });
+            return;
+          }
           setIsBuffering(false);
           setErrorMsg(
-            'Este canal usa MPEG-TS/Codec nativo sem CORS para navegador. Na TV Samsung ele usa o decodificador AVPlay!'
+            formatPlatformError('mpegts', targetUrl, `${errType || ''}: ${errDetail || ''}`)
           );
         });
 
@@ -472,17 +549,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     }
 
     if (video) {
-      setActiveEngineName('HTML5 Direct Video');
+      setActiveEngineName(isWebOSTV() ? 'LG webOS Native Player' : 'HTML5 Direct Video');
       video.src = streamUrl;
       video.load();
-      video.play().catch(() => {
+      video.play().catch((playErr) => {
         if (tizenAVPlay.isAvailable() && startHardwareAVPlay(streamUrl)) return;
         const hlsAlt = tryConvertXtreamToHls(streamUrl);
         if (hlsAlt && startHlsEngine(hlsAlt, true)) return;
         setIsBuffering(false);
-        setErrorMsg(
-          'Codec de vídeo/áudio (ex: MKV/AC3/TS) não suportado pelo navegador HTML5. Na TV Samsung, use o motor AVPlay!'
-        );
+        setErrorMsg(formatPlatformError('direct_codec', streamUrl, playErr?.message));
       });
     }
 
@@ -595,13 +670,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                 },
                 onError: (err) => {
                   setIsBuffering(false);
-                  setErrorMsg(`Canal indisponível no servidor (${err})`);
+                  setErrorMsg(formatPlatformError('avplay', channel.url, String(err)));
                 },
               });
               return;
             }
             setIsBuffering(false);
-            setErrorMsg('Formato de stream não suportado no navegador ou canal offline.');
+            setErrorMsg(formatPlatformError('html5_error', channel.url));
           }
         }}
       />
@@ -753,6 +828,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       {channel && errorMsg && (
         <div className="player-error-overlay">
           <AlertTriangle size={44} className="error-icon" />
+          <div className="error-platform-badge">{getPlatformDisplayName()}</div>
           <h3>Não foi possível reproduzir este canal</h3>
           <p>{errorMsg}</p>
           <div className="error-actions">

@@ -12,5 +12,6 @@
   "iconColor": "#003566",
   "disableBackHistoryAPI": true,
   "handlesRelaunch": false,
+  "allowMixedContent": true,
   "requiredACG": []
 }
