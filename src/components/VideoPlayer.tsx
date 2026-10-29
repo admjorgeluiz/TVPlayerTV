@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import Hls from 'hls.js';
 import mpegts from 'mpegts.js';
 import { QRCodeSVG } from 'qrcode.react';
@@ -8,6 +8,7 @@ import {
   Pause,
   Play,
   RotateCcw,
+  RotateCw,
   Star,
   Tv,
   Volume2,
@@ -22,6 +23,16 @@ import { Channel, PlaybackProgress, PlayerEngineMode } from '../types/iptv';
 import { isTizenTV, isWebOSTV, tizenAVPlay } from '../services/tizenBridge';
 import { detectLanServerBaseUrl } from '../services/pairingService';
 import { storageService } from '../services/storageService';
+
+export interface VideoPlayerRef {
+  togglePlayPause: () => void;
+  seekDelta: (seconds: number) => void;
+  showOsd: () => void;
+  hideOsd: () => void;
+  isOsdVisible: () => boolean;
+  isVod: () => boolean;
+  handleDpadNavigation: (key: string) => boolean;
+}
 
 interface VideoPlayerProps {
   channel: Channel | null;
@@ -142,26 +153,29 @@ export function formatPlatformError(
   }
 }
 
-export const VideoPlayer: React.FC<VideoPlayerProps> = ({
-  channel,
-  totalChannelsCount,
-  totalGroupsCount,
-  pairingCode,
-  lastWatchedChannel,
-  isStageFocused,
-  isFullScreen,
-  isFavorite,
-  engineMode,
-  numericBuffer,
-  onToggleFullScreen,
-  onToggleFavorite,
-  onChannelStep,
-  onSwitchEngine,
-  onOpenSettingsModal,
-  onLoadDemoChannels,
-  onSelectLastChannel,
-  onProgressUpdate,
-}) => {
+export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
+  {
+    channel,
+    totalChannelsCount,
+    totalGroupsCount,
+    pairingCode,
+    lastWatchedChannel,
+    isStageFocused,
+    isFullScreen,
+    isFavorite,
+    engineMode,
+    numericBuffer,
+    onToggleFullScreen,
+    onToggleFavorite,
+    onChannelStep,
+    onSwitchEngine,
+    onOpenSettingsModal,
+    onLoadDemoChannels,
+    onSelectLastChannel,
+    onProgressUpdate,
+  },
+  ref
+) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const hlsRef = useRef<Hls | null>(null);
   const mpegtsRef = useRef<mpegts.Player | null>(null);
@@ -178,6 +192,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [usingHardwareAVPlay, setUsingHardwareAVPlay] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showOsd, setShowOsd] = useState(true);
+  const [controlFocusIndex, setControlFocusIndex] = useState<number>(1);
   const [retryCount, setRetryCount] = useState(0);
   const [lanBaseUrl, setLanBaseUrl] = useState('https://admjorgeluiz.github.io/tv');
 
@@ -291,15 +306,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     detectLanServerBaseUrl().then((u) => setLanBaseUrl(u));
   }, []);
 
-  const triggerOsd = () => {
+  const triggerOsd = useCallback((durationMs: number = 4500) => {
     setShowOsd(true);
     if (osdTimerRef.current) {
       window.clearTimeout(osdTimerRef.current);
     }
     osdTimerRef.current = window.setTimeout(() => {
       setShowOsd(false);
-    }, 4500);
-  };
+    }, durationMs);
+  }, []);
 
   useEffect(() => {
     triggerOsd();
@@ -621,14 +636,130 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     setCurrentTime(clamped);
   };
 
+  useImperativeHandle(
+    ref,
+    () => ({
+      togglePlayPause: handleTogglePlayPause,
+      seekDelta: (delta: number) => {
+        handleSeek(Math.max(0, currentTime + delta));
+        triggerOsd(4000);
+      },
+      showOsd: () => triggerOsd(6000),
+      hideOsd: () => {
+        setShowOsd(false);
+        if (osdTimerRef.current) window.clearTimeout(osdTimerRef.current);
+      },
+      isOsdVisible: () => showOsd,
+      isVod: () => Boolean(Number.isFinite(duration) && duration > 60 && duration < 86400),
+      handleDpadNavigation: (key: string): boolean => {
+        const isVod = Number.isFinite(duration) && duration > 60 && duration < 86400;
+        const controlKeys = isVod
+          ? (['rewind', 'play_pause', 'forward', 'favorite', 'exit_fullscreen'] as const)
+          : (['prev_channel', 'play_pause', 'next_channel', 'favorite', 'exit_fullscreen'] as const);
+
+        // Se o OSD está oculto (assistindo limpo em tela cheia)
+        if (!showOsd) {
+          if (key === 'Enter') {
+            // 1x OK: Pausa/despausa e abre a barra com o foco em Play/Pause!
+            handleTogglePlayPause();
+            setControlFocusIndex(1);
+            triggerOsd(5000);
+            return true;
+          }
+          if (key === 'ArrowDown') {
+            // Seta para baixo: abre a barra de controles e foca no Play/Pause!
+            setControlFocusIndex(1);
+            triggerOsd(6000);
+            return true;
+          }
+          if (key === 'ArrowUp') {
+            // Seta para cima: mostra as informações do canal / OSD superior
+            triggerOsd(5000);
+            return true;
+          }
+          if (key === 'ArrowRight') {
+            if (isVod) {
+              handleSeek(currentTime + 10);
+              triggerOsd(4000);
+              return true;
+            }
+            return false;
+          }
+          if (key === 'ArrowLeft') {
+            if (isVod) {
+              handleSeek(Math.max(0, currentTime - 10));
+              triggerOsd(4000);
+              return true;
+            }
+            return false;
+          }
+          return false;
+        }
+
+        // Se o OSD já está visível:
+        triggerOsd(6000);
+
+        if (key === 'ArrowLeft') {
+          setControlFocusIndex((prev) => (prev > 0 ? prev - 1 : controlKeys.length - 1));
+          return true;
+        }
+
+        if (key === 'ArrowRight') {
+          setControlFocusIndex((prev) => (prev < controlKeys.length - 1 ? prev + 1 : 0));
+          return true;
+        }
+
+        if (key === 'ArrowUp') {
+          setShowOsd(false);
+          if (osdTimerRef.current) window.clearTimeout(osdTimerRef.current);
+          return true;
+        }
+
+        if (key === 'Enter') {
+          const selectedBtn = controlKeys[controlFocusIndex];
+          if (selectedBtn === 'play_pause') {
+            handleTogglePlayPause();
+          } else if (selectedBtn === 'rewind') {
+            handleSeek(Math.max(0, currentTime - 10));
+          } else if (selectedBtn === 'forward') {
+            handleSeek(currentTime + 10);
+          } else if (selectedBtn === 'prev_channel') {
+            onChannelStep(-1);
+          } else if (selectedBtn === 'next_channel') {
+            onChannelStep(1);
+          } else if (selectedBtn === 'favorite') {
+            onToggleFavorite();
+          } else if (selectedBtn === 'exit_fullscreen') {
+            onToggleFullScreen();
+          }
+          return true;
+        }
+
+        return false;
+      },
+    }),
+    [
+      handleTogglePlayPause,
+      handleSeek,
+      currentTime,
+      duration,
+      showOsd,
+      controlFocusIndex,
+      onChannelStep,
+      onToggleFavorite,
+      onToggleFullScreen,
+      triggerOsd,
+    ]
+  );
+
   const isVodSeekable = Number.isFinite(duration) && duration > 60 && duration < 86400;
   const qrTargetUrl = `${lanBaseUrl}/?pair=${encodeURIComponent(pairingCode)}`;
 
   return (
     <div
       className={`video-stage ${usingHardwareAVPlay ? 'avplay-stage-transparent' : ''}`}
-      onMouseMove={triggerOsd}
-      onClick={triggerOsd}
+      onMouseMove={() => triggerOsd()}
+      onClick={() => triggerOsd()}
       onDoubleClick={onToggleFullScreen}
     >
       <video
@@ -900,42 +1031,118 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
             <div className="osd-controls-bar">
               <div className="osd-controls-left">
-                <button
-                  type="button"
-                  className="osd-ctrl-btn"
-                  onClick={handleTogglePlayPause}
-                  title="Play / Pause (Espaço)"
-                >
-                  {isPlaying ? <Pause size={20} /> : <Play size={20} />}
-                  <span>{isPlaying ? 'Pausar' : 'Reproduzir'}</span>
-                </button>
+                {isVodSeekable ? (
+                  <>
+                    <button
+                      type="button"
+                      className={`osd-ctrl-btn ${
+                        isFullScreen && controlFocusIndex === 0 ? 'dpad-focused' : ''
+                      }`}
+                      onClick={() => {
+                        handleSeek(Math.max(0, currentTime - 10));
+                        triggerOsd(4000);
+                      }}
+                      title="Voltar 10s (◄)"
+                    >
+                      <RotateCcw size={18} />
+                      <span>-10s</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className={`osd-ctrl-btn play-pause-main ${
+                        isFullScreen && controlFocusIndex === 1 ? 'dpad-focused' : ''
+                      }`}
+                      onClick={handleTogglePlayPause}
+                      title="Play / Pause (OK)"
+                    >
+                      {isPlaying ? (
+                        <Pause size={20} fill="currentColor" />
+                      ) : (
+                        <Play size={20} fill="currentColor" />
+                      )}
+                      <span>{isPlaying ? 'Pausar' : 'Reproduzir'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className={`osd-ctrl-btn ${
+                        isFullScreen && controlFocusIndex === 2 ? 'dpad-focused' : ''
+                      }`}
+                      onClick={() => {
+                        handleSeek(currentTime + 10);
+                        triggerOsd(4000);
+                      }}
+                      title="Avançar 10s (►)"
+                    >
+                      <RotateCw size={18} />
+                      <span>+10s</span>
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className={`osd-ctrl-btn ${
+                        isFullScreen && controlFocusIndex === 0 ? 'dpad-focused' : ''
+                      }`}
+                      onClick={() => onChannelStep(-1)}
+                      title="Canal Anterior (CH-)"
+                    >
+                      <span>CH- Anterior</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className={`osd-ctrl-btn play-pause-main ${
+                        isFullScreen && controlFocusIndex === 1 ? 'dpad-focused' : ''
+                      }`}
+                      onClick={handleTogglePlayPause}
+                      title="Play / Pause (OK)"
+                    >
+                      {isPlaying ? (
+                        <Pause size={20} fill="currentColor" />
+                      ) : (
+                        <Play size={20} fill="currentColor" />
+                      )}
+                      <span>{isPlaying ? 'Pausar' : 'Reproduzir'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className={`osd-ctrl-btn ${
+                        isFullScreen && controlFocusIndex === 2 ? 'dpad-focused' : ''
+                      }`}
+                      onClick={() => onChannelStep(1)}
+                      title="Próximo Canal (CH+)"
+                    >
+                      <span>CH+ Próximo</span>
+                    </button>
+                  </>
+                )}
 
                 <button
                   type="button"
-                  className="osd-ctrl-btn"
-                  onClick={() => onChannelStep(-1)}
-                  title="Canal Anterior (CH- / Seta Baixo)"
-                >
-                  <span>▼ Canal Ant.</span>
-                </button>
-
-                <button
-                  type="button"
-                  className="osd-ctrl-btn"
-                  onClick={() => onChannelStep(1)}
-                  title="Próximo Canal (CH+ / Seta Cima)"
-                >
-                  <span>▲ Próx. Canal</span>
-                </button>
-
-                <button
-                  type="button"
-                  className={`osd-ctrl-btn ${isFavorite ? 'active-fav' : ''}`}
+                  className={`osd-ctrl-btn ${isFavorite ? 'active-fav' : ''} ${
+                    isFullScreen && controlFocusIndex === 3 ? 'dpad-focused' : ''
+                  }`}
                   onClick={onToggleFavorite}
                   title="Favoritar Canal (Botão Amarelo / F3)"
                 >
                   <Star size={18} fill={isFavorite ? '#f4e154' : 'none'} />
                   <span>{isFavorite ? 'Favorito' : 'Favoritar'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={`osd-ctrl-btn primary-purple ${
+                    isFullScreen && controlFocusIndex === 4 ? 'dpad-focused' : ''
+                  }`}
+                  onClick={onToggleFullScreen}
+                  title="Lista de Canais (Voltar)"
+                >
+                  <Minimize2 size={18} />
+                  <span>Lista de Canais</span>
                 </button>
               </div>
 
@@ -957,16 +1164,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                   onChange={(e) => handleVolumeChange(Number(e.target.value))}
                   className="tv-slider volume"
                 />
-
-                <button
-                  type="button"
-                  className="osd-ctrl-btn primary-purple"
-                  onClick={onToggleFullScreen}
-                  title="Alternar Tela Cheia (Botão Vermelho / OK)"
-                >
-                  {isFullScreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
-                  <span>{isFullScreen ? '◄ Voltar à Lista' : 'Tela Cheia'}</span>
-                </button>
               </div>
             </div>
           </div>
@@ -974,4 +1171,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       )}
     </div>
   );
-};
+});
+
+VideoPlayer.displayName = 'VideoPlayer';

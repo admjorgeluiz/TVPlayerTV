@@ -771,6 +771,29 @@ body,
   color: var(--accent-gold);
 }
 
+.osd-ctrl-btn.play-pause-main {
+  padding: 10px 20px;
+  border: 1.5px solid rgba(56, 189, 248, 0.45);
+  background: rgba(56, 189, 248, 0.12);
+}
+
+.osd-ctrl-btn.dpad-focused {
+  background: var(--accent-cyan) !important;
+  color: #06101e !important;
+  border-color: #fff !important;
+  box-shadow: 0 0 22px rgba(56, 189, 248, 0.75) !important;
+  transform: scale(1.08) !important;
+}
+
+.osd-ctrl-btn.dpad-focused span {
+  color: #06101e !important;
+  font-weight: 900 !important;
+}
+
+.osd-ctrl-btn.dpad-focused svg {
+  color: #06101e !important;
+}
+
 /* Modal de Configuração de Lista M3U / Xtream / Sistema */
 .tv-modal-backdrop {
   position: fixed;

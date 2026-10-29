@@ -49,6 +49,34 @@ export function isTvBackKey(e: KeyboardEvent): boolean {
   );
 }
 
+export function isTvPlayPauseKey(e: KeyboardEvent): boolean {
+  return (
+    e.keyCode === TIZEN_KEYS.PLAY_PAUSE ||
+    e.keyCode === TIZEN_KEYS.PLAY ||
+    e.keyCode === TIZEN_KEYS.PAUSE ||
+    e.key === 'MediaPlayPause' ||
+    e.key === 'MediaPlay' ||
+    e.key === 'MediaPause' ||
+    e.code === 'Space'
+  );
+}
+
+export function isTvRewindKey(e: KeyboardEvent): boolean {
+  return (
+    e.keyCode === TIZEN_KEYS.REWIND ||
+    e.key === 'MediaRewind' ||
+    e.key === 'MediaTrackPrevious'
+  );
+}
+
+export function isTvFastForwardKey(e: KeyboardEvent): boolean {
+  return (
+    e.keyCode === TIZEN_KEYS.FAST_FORWARD ||
+    e.key === 'MediaFastForward' ||
+    e.key === 'MediaTrackNext'
+  );
+}
+
 const REMOTE_KEYS_TO_REGISTER = [
   'MediaPlayPause',
   'MediaPlay',

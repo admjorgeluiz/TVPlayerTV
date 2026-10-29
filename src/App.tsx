@@ -37,7 +37,15 @@ import {
 } from './services/m3uParser';
 import { storageService } from './services/storageService';
 import { channelCacheService } from './services/channelCacheService';
-import { exitTizenApp, initTizenTV, isTvBackKey, TIZEN_KEYS } from './services/tizenBridge';
+import {
+  exitTizenApp,
+  initTizenTV,
+  isTvBackKey,
+  isTvFastForwardKey,
+  isTvPlayPauseKey,
+  isTvRewindKey,
+  TIZEN_KEYS,
+} from './services/tizenBridge';
 import {
   getOrCreatePairingCode,
   subscribeToPairingCode,
@@ -47,7 +55,7 @@ import {
   VirtualGroupList,
   VirtualMixedList,
 } from './components/VirtualList';
-import { VideoPlayer } from './components/VideoPlayer';
+import { VideoPlayer, VideoPlayerRef } from './components/VideoPlayer';
 import { PlaylistModal } from './components/PlaylistModal';
 import { MobileRemoteSetup } from './components/MobileRemoteSetup';
 import { ParentalPinModal, PinModalMode } from './components/ParentalPinModal';
@@ -147,6 +155,7 @@ export function App() {
 
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const numericTimerRef = useRef<number | null>(null);
+  const playerRef = useRef<VideoPlayerRef | null>(null);
 
   const showTemporaryFeedback = useCallback((msg: string) => {
     setSettingsFeedback(msg);
@@ -937,7 +946,7 @@ export function App() {
         return;
       }
 
-      // 3. CH+ / CH-
+      // 3. CH+ / CH- (Troca de canal oficial pelo controle remoto de TV)
       if (keyCode === TIZEN_KEYS.CH_UP || e.key === 'PageUp') {
         e.preventDefault();
         handleChannelStep(1);
@@ -949,10 +958,33 @@ export function App() {
         return;
       }
 
+      // 3.5 Teclas de Mídia Dedicadas (Play/Pause, Rewind, FastForward ou Espaço)
+      if (isTvPlayPauseKey(e)) {
+        e.preventDefault();
+        playerRef.current?.togglePlayPause();
+        return;
+      }
+      if (isTvRewindKey(e)) {
+        e.preventDefault();
+        playerRef.current?.seekDelta(-10);
+        return;
+      }
+      if (isTvFastForwardKey(e)) {
+        e.preventDefault();
+        playerRef.current?.seekDelta(10);
+        return;
+      }
+
       // 4. Botão Return / Back da Samsung TV (10009), LG webOS (461) ou Escape
       if (isTvBackKey(e)) {
         e.preventDefault();
         if (isFullScreen) {
+          // Se a barra OSD estiver aberta, o primeiro Voltar apenas fecha a barra
+          if (playerRef.current?.isOsdVisible()) {
+            playerRef.current.hideOsd();
+            return;
+          }
+          // Se a barra já estiver fechada, sai de tela cheia e volta para a lista
           setIsFullScreen(false);
           setFocusZone('list');
           return;
@@ -974,18 +1006,20 @@ export function App() {
         return;
       }
 
-      // 5. Navegação quando está em Tela Cheia
+      // 5. Navegação quando está em Tela Cheia (D-Pad inteligente de Smart TV)
       if (isFullScreen) {
-        if (e.key === 'ArrowUp') {
+        const handledByPlayer = playerRef.current?.handleDpadNavigation(e.key);
+        if (handledByPlayer) {
           e.preventDefault();
-          handleChannelStep(1);
-        } else if (e.key === 'ArrowDown') {
-          e.preventDefault();
-          handleChannelStep(-1);
-        } else if (e.key === 'Enter' || e.key === 'ArrowLeft') {
+          return;
+        }
+
+        // Em Live TV com OSD fechado: Seta para esquerda sai de tela cheia e volta para a lista
+        if (e.key === 'ArrowLeft') {
           e.preventDefault();
           setIsFullScreen(false);
           setFocusZone('list');
+          return;
         }
         return;
       }
@@ -1627,6 +1661,7 @@ export function App() {
         )}
 
         <VideoPlayer
+          ref={playerRef}
           channel={selectedChannel}
           totalChannelsCount={visibleChannelsPool.length}
           totalGroupsCount={visibleGroupSummaries.length}
