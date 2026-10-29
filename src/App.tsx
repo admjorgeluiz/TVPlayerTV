@@ -329,7 +329,40 @@ export function App() {
     }
   }, [remotePairParam, handleLoadM3uFromUrl]);
 
-  // Filtra canais e grupos +18 quando o Selo +18 está desativado (padrão = oculto!)
+  useEffect(() => {
+    if (allChannels.length === 0 || recentUrls.length === 0) return;
+
+    let hasChanges = false;
+    const cleanedRecents: string[] = [];
+
+    for (const url of recentUrls) {
+      const prog = playbackProgressMap[url] || storageService.getPlaybackProgress(url);
+      const ch = allChannels.find((c) => c.url === url);
+
+      // Se o item tem progresso concluído:
+      if (prog?.completed) {
+        hasChanges = true;
+        // Se for série, tenta trocar para o próximo episódio
+        if (ch?.seriesName) {
+          const nextEp = findNextEpisode(ch, allChannels);
+          if (nextEp && !cleanedRecents.includes(nextEp.url)) {
+            cleanedRecents.push(nextEp.url);
+          }
+        }
+        // Se for filme VOD ou série sem próximo episódio: não adiciona (limpa)
+        continue;
+      }
+
+      if (!cleanedRecents.includes(url)) {
+        cleanedRecents.push(url);
+      }
+    }
+
+    if (hasChanges) {
+      storageService.setRecents(cleanedRecents);
+      setRecentUrls(cleanedRecents);
+    }
+  }, [allChannels, playbackProgressMap]);
   const visibleChannelsPool = useMemo(() => {
     if (showAdultContent) return allChannels;
     return allChannels.filter((c) => !c.isAdult);

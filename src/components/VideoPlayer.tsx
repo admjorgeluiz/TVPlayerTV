@@ -218,6 +218,41 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
   const seekDebounceTimerRef = useRef<number | null>(null);
   const seekLockUntilRef = useRef<number>(0);
   const holdIntervalRef = useRef<number | null>(null);
+  const autoNextEpisodeTimerRef = useRef<number | null>(null);
+  const isNavigatingNextEpRef = useRef<boolean>(false);
+  const [autoNextCountdown, setAutoNextCountdown] = useState<number | null>(null);
+
+  // Função protegida contra cliques duplicados para avançar ao próximo episódio
+  const handleTriggerNextEpisode = useCallback(() => {
+    if (!nextEpisode || isNavigatingNextEpRef.current) return;
+    isNavigatingNextEpRef.current = true;
+    if (autoNextEpisodeTimerRef.current) {
+      clearInterval(autoNextEpisodeTimerRef.current);
+      autoNextEpisodeTimerRef.current = null;
+    }
+    setAutoNextCountdown(null);
+
+    // Marca o episódio atual como concluído
+    if (channel?.url) {
+      const completedProg: PlaybackProgress = {
+        url: channel.url,
+        currentTime: 0,
+        duration: Math.floor(duration),
+        percentage: 100,
+        completed: true,
+        updatedAt: Date.now(),
+      };
+      storageService.savePlaybackProgress(completedProg);
+      onProgressUpdate?.(completedProg);
+    }
+
+    onSelectNextEpisode?.(nextEpisode);
+
+    // Desbloqueia após 1.2s para evitar cliques múltiplos acidentais
+    setTimeout(() => {
+      isNavigatingNextEpRef.current = false;
+    }, 1200);
+  }, [nextEpisode, channel?.url, duration, onProgressUpdate, onSelectNextEpisode]);
 
   useEffect(() => {
     savedProgressRef.current =
@@ -368,8 +403,54 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
     onProgressUpdate?.(prog);
   };
 
+  // Monitora zona de encerramento do episódio para contagem regressiva automática (Estilo Netflix / Streaming)
   useEffect(() => {
-    detectLanServerBaseUrl().then((u) => setLanBaseUrl(u));
+    if (!channel || !nextEpisode || duration <= 60) {
+      if (autoNextEpisodeTimerRef.current) {
+        clearInterval(autoNextEpisodeTimerRef.current);
+        autoNextEpisodeTimerRef.current = null;
+      }
+      setAutoNextCountdown(null);
+      return;
+    }
+
+    const inCompletionZone = isVodCompleted(currentTime, duration);
+    if (inCompletionZone && !isNavigatingNextEpRef.current) {
+      // Inicia contagem regressiva de 8 segundos se ainda não estiver ativa
+      if (autoNextCountdown === null && !autoNextEpisodeTimerRef.current) {
+        let remainingSec = 8;
+        setAutoNextCountdown(remainingSec);
+        autoNextEpisodeTimerRef.current = window.setInterval(() => {
+          remainingSec -= 1;
+          if (remainingSec <= 0) {
+            if (autoNextEpisodeTimerRef.current) {
+              clearInterval(autoNextEpisodeTimerRef.current);
+              autoNextEpisodeTimerRef.current = null;
+            }
+            setAutoNextCountdown(null);
+            handleTriggerNextEpisode();
+          } else {
+            setAutoNextCountdown(remainingSec);
+          }
+        }, 1000);
+      }
+    } else if (!inCompletionZone && autoNextCountdown !== null) {
+      // Se o usuário retrocedeu o vídeo antes da margem de créditos, cancela a contagem
+      if (autoNextEpisodeTimerRef.current) {
+        clearInterval(autoNextEpisodeTimerRef.current);
+        autoNextEpisodeTimerRef.current = null;
+      }
+      setAutoNextCountdown(null);
+    }
+  }, [currentTime, duration, channel, nextEpisode, autoNextCountdown, handleTriggerNextEpisode]);
+
+  useEffect(() => {
+    return () => {
+      if (autoNextEpisodeTimerRef.current) {
+        clearInterval(autoNextEpisodeTimerRef.current);
+        autoNextEpisodeTimerRef.current = null;
+      }
+    };
   }, []);
 
   const triggerOsd = useCallback((durationMs: number = 4500) => {
@@ -456,21 +537,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
           handleProgressTick(cur, dur);
         },
         onStreamCompleted: () => {
-          if (channel?.url) {
-            const completedProg: PlaybackProgress = {
-              url: channel.url,
-              currentTime: 0,
-              duration: Math.floor(duration),
-              percentage: 100,
-              completed: true,
-              updatedAt: Date.now(),
-            };
-            storageService.savePlaybackProgress(completedProg);
-            onProgressUpdate?.(completedProg);
-          }
-          if (nextEpisode) {
-            onSelectNextEpisode?.(nextEpisode);
-          }
+          handleTriggerNextEpisode();
         },
         onError: (err) => {
           const hlsVariant = tryConvertXtreamToHls(targetUrl);
@@ -815,7 +882,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
         // Se o card de próximo episódio está visível e o OSD fechado, 1x OK aciona o próximo episódio
         const isCompletedZone = isVodCompleted(currentTime, duration);
         if (!showOsd && nextEpisode && isCompletedZone && key === 'Enter') {
-          onSelectNextEpisode?.(nextEpisode);
+          handleTriggerNextEpisode();
           return true;
         }
 
@@ -955,21 +1022,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
           flushProgressOnExit();
         }}
         onEnded={() => {
-          if (channel?.url) {
-            const completedProg: PlaybackProgress = {
-              url: channel.url,
-              currentTime: 0,
-              duration: Math.floor(duration),
-              percentage: 100,
-              completed: true,
-              updatedAt: Date.now(),
-            };
-            storageService.savePlaybackProgress(completedProg);
-            onProgressUpdate?.(completedProg);
-          }
-          if (nextEpisode) {
-            onSelectNextEpisode?.(nextEpisode);
-          }
+          handleTriggerNextEpisode();
         }}
         onTimeUpdate={() => {
           if (videoRef.current) {
@@ -1027,7 +1080,11 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
       {channel && nextEpisode && isVodCompleted(currentTime, duration) && (
         <div className="next-episode-floating-prompt">
           <div className="next-ep-header">
-            <span className="next-ep-badge">PRÓXIMO EPISÓDIO</span>
+            <span className="next-ep-badge">
+              {autoNextCountdown !== null
+                ? `PRÓXIMO EPISÓDIO EM ${autoNextCountdown}S`
+                : 'PRÓXIMO EPISÓDIO'}
+            </span>
             <span className="next-ep-tag">
               S{String(nextEpisode.seasonNumber || 1).padStart(2, '0')}E{String(nextEpisode.episodeNumber || 1).padStart(2, '0')}
             </span>
@@ -1038,11 +1095,15 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
             className="tv-btn primary next-ep-action-btn"
             onClick={(e) => {
               e.stopPropagation();
-              onSelectNextEpisode?.(nextEpisode);
+              handleTriggerNextEpisode();
             }}
           >
             <SkipForward size={18} fill="currentColor" />
-            <span>Assistir Próximo Episódio</span>
+            <span>
+              {autoNextCountdown !== null
+                ? `Reproduzindo em ${autoNextCountdown}s (ou OK)`
+                : 'Assistir Próximo Episódio'}
+            </span>
             <span className="dpad-ok-pill">OK ➔</span>
           </button>
         </div>
