@@ -372,13 +372,47 @@ export const tizenAVPlay = {
     return true;
   },
 
-  seekTo(seconds: number): boolean {
+  seekTo(seconds: number, onSuccess?: () => void, onError?: (err: any) => void): boolean {
     if (!this.isAvailable()) return false;
     try {
       const ms = Math.max(0, Math.floor(seconds * 1000));
-      window.webapis.avplay.seekTo(ms, () => {}, () => {});
+      const state = window.webapis.avplay.getState?.();
+
+      // No Samsung Tizen AVPlay, seekTo exige estado PLAYING ou PAUSED.
+      // Se ainda estiver em READY (durante preparação do stream), aguarda o estado estabilizar.
+      if (state !== 'PLAYING' && state !== 'PAUSED') {
+        let attempts = 0;
+        const retryTimer = setInterval(() => {
+          attempts++;
+          try {
+            const curState = window.webapis.avplay.getState?.();
+            if (curState === 'PLAYING' || curState === 'PAUSED') {
+              clearInterval(retryTimer);
+              window.webapis.avplay.seekTo(
+                ms,
+                () => onSuccess?.(),
+                (err: any) => onError?.(err)
+              );
+            } else if (attempts >= 25) {
+              clearInterval(retryTimer);
+              onError?.('AVPlay seek timeout waiting for PLAYING state');
+            }
+          } catch (retryErr) {
+            clearInterval(retryTimer);
+            onError?.(retryErr);
+          }
+        }, 150);
+        return true;
+      }
+
+      window.webapis.avplay.seekTo(
+        ms,
+        () => onSuccess?.(),
+        (err: any) => onError?.(err)
+      );
       return true;
-    } catch {
+    } catch (err) {
+      onError?.(err);
       return false;
     }
   },

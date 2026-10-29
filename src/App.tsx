@@ -332,19 +332,24 @@ export function App() {
     if (!found) return null;
 
     // Se o último assistido for um episódio de série e já foi concluído (> 90%), procura o próximo episódio!
-    const progress = playbackProgressMap[found.url];
+    const progress = playbackProgressMap[found.url] || storageService.getPlaybackProgress(found.url);
     if (progress?.completed && found.seriesName) {
       const nextEp = findNextEpisode(found, allChannels);
       if (nextEp && !nextEp.isAdult) {
+        const nextEpProg = playbackProgressMap[nextEp.url] || storageService.getPlaybackProgress(nextEp.url) || undefined;
         return {
           ...nextEp,
           isNextEpisodeSuggestion: true,
           previousEpisodeName: found.name,
+          playbackProgress: nextEpProg,
         };
       }
     }
 
-    return found;
+    return {
+      ...found,
+      playbackProgress: progress || undefined,
+    };
   }, [recentUrls, visibleChannelsPool, playbackProgressMap, allChannels]);
 
   /**
@@ -1030,7 +1035,8 @@ export function App() {
           e.preventDefault();
           if (lastWatchedChannel) {
             handleSelectChannel(lastWatchedChannel);
-            setFocusZone('list');
+            setIsFullScreen(true);
+            setFocusZone('fullscreen_player');
           }
         } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
           e.preventDefault();
@@ -1685,7 +1691,11 @@ export function App() {
           onSwitchEngine={handleSwitchEngineMode}
           onOpenSettingsModal={() => setIsModalOpen(true)}
           onLoadDemoChannels={handleLoadDemo}
-          onSelectLastChannel={(ch) => handleSelectChannel(ch)}
+          onSelectLastChannel={(ch) => {
+            handleSelectChannel(ch);
+            setIsFullScreen(true);
+            setFocusZone('fullscreen_player');
+          }}
           onProgressUpdate={handleProgressUpdate}
         />
       </main>

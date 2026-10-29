@@ -12,6 +12,7 @@ export interface Channel {
   episodeNumber?: number;
   isNextEpisodeSuggestion?: boolean;
   previousEpisodeName?: string;
+  playbackProgress?: PlaybackProgress;
 }
 
 export interface PlaybackProgress {

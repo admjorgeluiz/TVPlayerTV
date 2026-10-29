@@ -208,32 +208,46 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
   });
 
   useEffect(() => {
-    savedProgressRef.current = channel?.url ? storageService.getPlaybackProgress(channel.url) : null;
+    savedProgressRef.current =
+      channel?.playbackProgress ||
+      (channel?.url ? storageService.getPlaybackProgress(channel.url) : null);
     hasAttemptedResumeRef.current = false;
     setResumeToast(null);
     if (resumeToastTimerRef.current) {
       window.clearTimeout(resumeToastTimerRef.current);
     }
-  }, [channel?.url]);
+  }, [channel?.url, channel?.playbackProgress]);
 
   const applyResumeIfEligible = (targetDuration?: number) => {
     if (hasAttemptedResumeRef.current) return;
-    const saved = savedProgressRef.current;
-    if (!saved || saved.completed || saved.currentTime < 15) return;
+    const saved =
+      savedProgressRef.current ||
+      (channel?.url ? storageService.getPlaybackProgress(channel.url) : null);
+    if (!saved || saved.completed || saved.currentTime < 10) return;
 
-    if (targetDuration && targetDuration > 60) {
-      if (saved.currentTime >= targetDuration * 0.9 || targetDuration - saved.currentTime <= 150) {
+    if (targetDuration && targetDuration > 30) {
+      if (saved.currentTime >= targetDuration * 0.95 || targetDuration - saved.currentTime <= 60) {
         return;
       }
     }
 
-    hasAttemptedResumeRef.current = true;
     const resumeSec = saved.currentTime;
 
     if (usingHardwareAVPlay) {
-      tizenAVPlay.seekTo(resumeSec);
+      const ok = tizenAVPlay.seekTo(resumeSec, () => {
+        hasAttemptedResumeRef.current = true;
+      });
+      if (ok) {
+        hasAttemptedResumeRef.current = true;
+      }
     } else if (videoRef.current) {
-      videoRef.current.currentTime = resumeSec;
+      try {
+        videoRef.current.currentTime = resumeSec;
+        hasAttemptedResumeRef.current = true;
+      } catch {
+        // Se a mídia ainda não estiver em estado seekable, aguarda canplay / timeupdate
+        return;
+      }
     }
 
     setResumeToast({
@@ -256,16 +270,48 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
     if (!channel?.url) return;
     latestPlaybackStateRef.current = { url: channel.url, currentTime: cur, duration: dur };
 
+    // Verificação de segurança: se o vídeo começou perto do início (< 4s), há tempo salvo >= 10s e ainda não retomou
+    if (!hasAttemptedResumeRef.current) {
+      const saved =
+        savedProgressRef.current ||
+        storageService.getPlaybackProgress(channel.url);
+      if (saved && !saved.completed && saved.currentTime >= 10) {
+        const durValid = Number.isFinite(dur) && dur > 30;
+        const isNotNearEnd =
+          !durValid || (saved.currentTime < dur * 0.95 && dur - saved.currentTime > 60);
+        if (cur < 4 && isNotNearEnd) {
+          hasAttemptedResumeRef.current = true;
+          if (usingHardwareAVPlay) {
+            tizenAVPlay.seekTo(saved.currentTime);
+          } else if (videoRef.current) {
+            try {
+              videoRef.current.currentTime = saved.currentTime;
+            } catch {}
+          }
+          setResumeToast({
+            time: saved.currentTime,
+            formatted: formatTime(saved.currentTime),
+          });
+          if (resumeToastTimerRef.current) {
+            window.clearTimeout(resumeToastTimerRef.current);
+          }
+          resumeToastTimerRef.current = window.setTimeout(() => {
+            setResumeToast(null);
+          }, 6000);
+        }
+      }
+    }
+
     const isVod = Number.isFinite(dur) && dur > 60 && dur < 86400;
     if (!isVod) return;
 
-    // Regra de descarte rápido: menos de 60 segundos = zapeada/engano, não polui histórico
-    if (cur < 60) return;
+    // Regra de descarte rápido: menos de 10 segundos = zapeada/engano, não polui histórico
+    if (cur < 10) return;
 
     const now = Date.now();
     const isCompleted = cur / dur >= 0.9 || dur - cur <= 150;
 
-    if (isCompleted || now - lastSavedWallClockRef.current >= 5000) {
+    if (isCompleted || now - lastSavedWallClockRef.current >= 4000) {
       lastSavedWallClockRef.current = now;
       const pct = Math.min(100, Math.round((cur / dur) * 100));
       const prog: PlaybackProgress = {
@@ -286,7 +332,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
     if (!state.url) return;
     const { url, currentTime: cur, duration: dur } = state;
     const isVod = Number.isFinite(dur) && dur > 60 && dur < 86400;
-    if (!isVod || cur < 60) return;
+    if (!isVod || cur < 10) return;
 
     const isCompleted = cur / dur >= 0.9 || dur - cur <= 150;
     const pct = Math.min(100, Math.round((cur / dur) * 100));
@@ -420,7 +466,14 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
       setUsingHardwareAVPlay(false);
       setActiveEngineName('HLS.js Engine');
 
+      const saved =
+        savedProgressRef.current ||
+        (channel?.url ? storageService.getPlaybackProgress(channel.url) : null);
+      const targetStart =
+        saved && !saved.completed && saved.currentTime >= 10 ? saved.currentTime : -1;
+
       const hls = new Hls({
+        startPosition: targetStart,
         enableWorker: true,
         lowLatencyMode: true,
         backBufferLength: 30,
@@ -440,6 +493,19 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
         if (data.levels && data.levels.length > 0) {
           const highest = data.levels[data.levels.length - 1];
           if (highest.height) setResolutionLabel(`${highest.height}p`);
+        }
+        if (targetStart > 0) {
+          hasAttemptedResumeRef.current = true;
+          setResumeToast({
+            time: targetStart,
+            formatted: formatTime(targetStart),
+          });
+          if (resumeToastTimerRef.current) {
+            window.clearTimeout(resumeToastTimerRef.current);
+          }
+          resumeToastTimerRef.current = window.setTimeout(() => {
+            setResumeToast(null);
+          }, 6000);
         }
         video.play().catch(() => {});
       });
@@ -548,7 +614,10 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
     if (
       tizenAVPlay.isAvailable() &&
       (engineMode === 'tizen_avplay' ||
-        (engineMode === 'auto' && (streamType === 'mpegts' || /\.mkv($|\?)/i.test(streamUrl))))
+        (engineMode === 'auto' &&
+          (streamType === 'mpegts' ||
+            streamType === 'vod_container' ||
+            /\.mkv($|\?)/i.test(streamUrl))))
     ) {
       if (startHardwareAVPlay(streamUrl)) return;
     }
@@ -768,6 +837,15 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
         style={{ display: usingHardwareAVPlay ? 'none' : 'block' }}
         playsInline
         autoPlay
+        onLoadedMetadata={() => {
+          if (videoRef.current?.duration) {
+            setDuration(videoRef.current.duration);
+          }
+          applyResumeIfEligible(videoRef.current?.duration);
+        }}
+        onCanPlay={() => {
+          applyResumeIfEligible(videoRef.current?.duration);
+        }}
         onWaiting={() => setIsBuffering(true)}
         onPlaying={() => {
           setIsBuffering(false);
@@ -902,31 +980,87 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
                 <strong>OK</strong>.
               </p>
 
-              {lastWatchedChannel && !lastWatchedChannel.isAdult && onSelectLastChannel && (
-                <button
-                  type="button"
-                  className={`tv-btn primary resume-last-btn ${
-                    isStageFocused ? 'dpad-focused' : ''
-                  }`}
-                  onClick={() => onSelectLastChannel(lastWatchedChannel)}
-                >
-                  <Play size={18} fill="currentColor" />
-                  {lastWatchedChannel.isNextEpisodeSuggestion ? (
-                    <>
-                      Assistir a Seguir: <strong>{lastWatchedChannel.name}</strong>
-                    </>
-                  ) : (
-                    <>
-                      Continuar Assistindo: <strong>{lastWatchedChannel.name}</strong>
-                    </>
-                  )}
-                  {isStageFocused && (
-                    <span className="dpad-ok-pill" style={{ marginLeft: 8 }}>
-                      OK ➔
-                    </span>
-                  )}
-                </button>
-              )}
+              {lastWatchedChannel && !lastWatchedChannel.isAdult && onSelectLastChannel && (() => {
+                const prog =
+                  lastWatchedChannel.playbackProgress ||
+                  storageService.getPlaybackProgress(lastWatchedChannel.url);
+                const hasTime = Boolean(
+                  prog && prog.currentTime > 0 && !lastWatchedChannel.isNextEpisodeSuggestion
+                );
+                const curFormatted = hasTime ? formatTime(prog!.currentTime) : '';
+                const durFormatted = hasTime && prog!.duration > 0 ? formatTime(prog!.duration) : '';
+                const remainingSec =
+                  hasTime && prog!.duration > prog!.currentTime ? prog!.duration - prog!.currentTime : 0;
+                const remFormatted = remainingSec > 0 ? formatTime(remainingSec) : '';
+
+                return (
+                  <div className="resume-hero-card">
+                    <div className="resume-hero-header">
+                      <span className="resume-pill-badge">
+                        {lastWatchedChannel.isNextEpisodeSuggestion
+                          ? 'A Seguir'
+                          : 'Continuar Assistindo'}
+                      </span>
+                      {hasTime && prog!.percentage > 0 && (
+                        <span className="resume-pct-pill">{prog!.percentage}% concluído</span>
+                      )}
+                    </div>
+
+                    <div className="resume-hero-title-wrap">
+                      <span className="resume-channel-name">{lastWatchedChannel.name}</span>
+                      {lastWatchedChannel.seriesName && (
+                        <span className="resume-series-tag">
+                          {lastWatchedChannel.seriesName} • Temp.{' '}
+                          {lastWatchedChannel.seasonNumber || 1} Ep.{' '}
+                          {lastWatchedChannel.episodeNumber || 1}
+                        </span>
+                      )}
+                    </div>
+
+                    {hasTime && prog!.duration > 0 && (
+                      <div className="resume-progress-container">
+                        <div className="resume-progress-track">
+                          <div
+                            className="resume-progress-fill"
+                            style={{
+                              width: `${Math.min(100, Math.max(3, prog!.percentage))}%`,
+                            }}
+                          />
+                        </div>
+                        <div className="resume-time-labels">
+                          <span>
+                            Parou em <strong>{curFormatted}</strong>
+                            {durFormatted ? ` / ${durFormatted}` : ''}
+                          </span>
+                          {remFormatted && <span>Resta <strong>{remFormatted}</strong></span>}
+                        </div>
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      className={`tv-btn primary resume-last-btn ${
+                        isStageFocused ? 'dpad-focused' : ''
+                      }`}
+                      onClick={() => onSelectLastChannel(lastWatchedChannel)}
+                    >
+                      <Play size={18} fill="currentColor" />
+                      <span>
+                        {lastWatchedChannel.isNextEpisodeSuggestion
+                          ? 'Assistir Próximo Episódio'
+                          : hasTime
+                          ? `Continuar de ${curFormatted}`
+                          : `Assistir: ${lastWatchedChannel.name}`}
+                      </span>
+                      {isStageFocused && (
+                        <span className="dpad-ok-pill" style={{ marginLeft: 8 }}>
+                          OK ➔ Tela Cheia
+                        </span>
+                      )}
+                    </button>
+                  </div>
+                );
+              })()}
 
               <div className="tv-guide-grid">
                 <div className="guide-step-box">
