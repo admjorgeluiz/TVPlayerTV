@@ -213,11 +213,16 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
     duration: 0,
   });
 
-  // Controle de seek contínuo suave (Hold-to-repeat / múltiplos toques rápidos) sem sobrescrita
+  // Controle de seek contínuo e fluidez da timeline estilo Netflix
   const pendingSeekTargetRef = useRef<number | null>(null);
   const seekDebounceTimerRef = useRef<number | null>(null);
   const seekLockUntilRef = useRef<number>(0);
   const holdIntervalRef = useRef<number | null>(null);
+  const [scrubPreview, setScrubPreview] = useState<{ time: number; delta: number } | null>(null);
+  const scrubTimeoutRef = useRef<number | null>(null);
+  const consecutiveSeekCountRef = useRef<number>(0);
+  const lastSeekTimestampRef = useRef<number>(0);
+  const timelineTrackRef = useRef<HTMLDivElement | null>(null);
   const autoNextEpisodeTimerRef = useRef<number | null>(null);
   const isNavigatingNextEpRef = useRef<boolean>(false);
   const [autoNextCountdown, setAutoNextCountdown] = useState<number | null>(null);
@@ -797,34 +802,76 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
     }
   };
 
-  const handleSeek = (sec: number) => {
-    triggerOsd();
+  const handleSeek = (sec: number, isDirectClick = false) => {
+    triggerOsd(4500);
     const maxSec = duration > 0 ? Math.max(0, duration - 2) : 86400;
     const clamped = Math.max(0, Math.min(maxSec, sec));
-    pendingSeekTargetRef.current = clamped;
-    seekLockUntilRef.current = Date.now() + 1500;
+    
+    // Atualização instantânea na interface (0ms de latência visual)
+    const delta = clamped - currentTime;
+    setScrubPreview({ time: clamped, delta });
     setCurrentTime(clamped);
+    pendingSeekTargetRef.current = clamped;
+    seekLockUntilRef.current = Date.now() + 1400;
 
-    if (usingHardwareAVPlay) {
-      if (seekDebounceTimerRef.current) {
-        window.clearTimeout(seekDebounceTimerRef.current);
-      }
-      seekDebounceTimerRef.current = window.setTimeout(() => {
-        tizenAVPlay.seekTo(clamped);
-      }, 250);
-      return;
+    if (seekDebounceTimerRef.current) {
+      window.clearTimeout(seekDebounceTimerRef.current);
     }
 
-    const video = videoRef.current;
-    if (!video || !Number.isFinite(video.duration) || video.duration <= 0) return;
-    try {
-      video.currentTime = clamped;
-    } catch {}
+    // Debounce calibrado: 80ms para clique direto, 200ms para setas/D-Pad
+    seekDebounceTimerRef.current = window.setTimeout(() => {
+      if (usingHardwareAVPlay) {
+        tizenAVPlay.seekTo(clamped);
+      } else {
+        const video = videoRef.current;
+        if (video && Number.isFinite(video.duration) && video.duration > 0) {
+          try {
+            video.currentTime = clamped;
+          } catch {}
+        }
+      }
+
+      if (scrubTimeoutRef.current) {
+        window.clearTimeout(scrubTimeoutRef.current);
+      }
+      scrubTimeoutRef.current = window.setTimeout(() => {
+        setScrubPreview(null);
+        pendingSeekTargetRef.current = null;
+      }, 450);
+    }, isDirectClick ? 80 : 200);
   };
 
   const stepSeek = (delta: number) => {
-    const base = pendingSeekTargetRef.current !== null ? pendingSeekTargetRef.current : currentTime;
-    handleSeek(base + delta);
+    const now = Date.now();
+    if (now - lastSeekTimestampRef.current < 650) {
+      consecutiveSeekCountRef.current = Math.min(5, consecutiveSeekCountRef.current + 1);
+    } else {
+      consecutiveSeekCountRef.current = 1;
+    }
+    lastSeekTimestampRef.current = now;
+
+    // Aceleração progressiva no controle remoto estilo Netflix (10s -> 15s -> 20s -> 30s)
+    const multiplier =
+      consecutiveSeekCountRef.current >= 4 ? 3 : consecutiveSeekCountRef.current >= 2 ? 1.5 : 1;
+    const effectiveDelta = Math.round(delta * multiplier);
+
+    const base =
+      scrubPreview !== null
+        ? scrubPreview.time
+        : pendingSeekTargetRef.current !== null
+        ? pendingSeekTargetRef.current
+        : currentTime;
+    handleSeek(base + effectiveDelta);
+  };
+
+  const handleTimelineClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    if (!duration || duration <= 0) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const ratio = Math.max(0, Math.min(1, clickX / rect.width));
+    const targetSec = Math.floor(ratio * duration);
+    handleSeek(targetSec, true);
   };
 
   const startContinuousSeek = (delta: number) => {
@@ -834,7 +881,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
     }
     holdIntervalRef.current = window.setInterval(() => {
       stepSeek(delta);
-    }, 180);
+    }, 220);
   };
 
   const stopContinuousSeek = () => {
@@ -842,6 +889,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
       clearInterval(holdIntervalRef.current);
       holdIntervalRef.current = null;
     }
+    consecutiveSeekCountRef.current = 0;
   };
 
   useEffect(() => {
@@ -855,6 +903,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
       window.removeEventListener('keyup', handleGlobalKeyUp);
       stopContinuousSeek();
       if (seekDebounceTimerRef.current) window.clearTimeout(seekDebounceTimerRef.current);
+      if (scrubTimeoutRef.current) window.clearTimeout(scrubTimeoutRef.current);
     };
   }, []);
 
@@ -876,7 +925,9 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
       handleDpadNavigation: (key: string): boolean => {
         const isVod = Number.isFinite(duration) && duration > 60 && duration < 86400;
         const controlKeys = isVod
-          ? (['rewind', 'play_pause', 'forward', 'favorite', 'exit_fullscreen'] as const)
+          ? nextEpisode
+            ? (['rewind', 'play_pause', 'forward', 'next_ep', 'favorite', 'exit_fullscreen'] as const)
+            : (['rewind', 'play_pause', 'forward', 'favorite', 'exit_fullscreen'] as const)
           : (['prev_channel', 'play_pause', 'next_channel', 'favorite', 'exit_fullscreen'] as const);
 
         // Se o card de próximo episódio está visível e o OSD fechado, 1x OK aciona o próximo episódio
@@ -945,13 +996,15 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
         }
 
         if (key === 'Enter') {
-          const selectedBtn = controlKeys[controlFocusIndex];
+          const selectedBtn = controlKeys[controlFocusIndex] || controlKeys[1];
           if (selectedBtn === 'play_pause') {
             handleTogglePlayPause();
           } else if (selectedBtn === 'rewind') {
             stepSeek(-10);
           } else if (selectedBtn === 'forward') {
             stepSeek(10);
+          } else if (selectedBtn === 'next_ep') {
+            handleTriggerNextEpisode();
           } else if (selectedBtn === 'prev_channel') {
             onChannelStep(-1);
           } else if (selectedBtn === 'next_channel') {
@@ -1348,19 +1401,79 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
             </div>
           </div>
 
-          <div className="tv-osd-bottom">
+          <div className="tv-osd-bottom netflix-osd-bottom">
             {isVodSeekable && (
-              <div className="osd-timeline-row">
-                <span className="time-label">{formatTime(currentTime)}</span>
-                <input
-                  type="range"
-                  min={0}
-                  max={duration || 100}
-                  value={currentTime}
-                  onChange={(e) => handleSeek(Number(e.target.value))}
-                  className="tv-slider timeline"
-                />
-                <span className="time-label">{formatTime(duration)}</span>
+              <div className="netflix-timeline-wrapper">
+                <div className="netflix-timeline-labels">
+                  <span className="netflix-time-current">
+                    {formatTime(scrubPreview ? scrubPreview.time : currentTime)}
+                  </span>
+                  <span className="netflix-time-remaining">
+                    {duration > (scrubPreview ? scrubPreview.time : currentTime)
+                      ? `-${formatTime(duration - (scrubPreview ? scrubPreview.time : currentTime))}`
+                      : formatTime(duration)}
+                  </span>
+                </div>
+                <div
+                  ref={timelineTrackRef}
+                  className={`netflix-timeline-track ${scrubPreview ? 'is-scrubbing' : 'is-gliding'}`}
+                  onClick={handleTimelineClick}
+                >
+                  <div className="netflix-timeline-rail" />
+                  <div
+                    className="netflix-timeline-fill"
+                    style={{
+                      width: `${
+                        duration > 0
+                          ? Math.min(
+                              100,
+                              Math.max(
+                                0,
+                                ((scrubPreview ? scrubPreview.time : currentTime) / duration) * 100
+                              )
+                            )
+                          : 0
+                      }%`,
+                    }}
+                  />
+                  <div
+                    className="netflix-timeline-thumb"
+                    style={{
+                      left: `${
+                        duration > 0
+                          ? Math.min(
+                              100,
+                              Math.max(
+                                0,
+                                ((scrubPreview ? scrubPreview.time : currentTime) / duration) * 100
+                              )
+                            )
+                          : 0
+                      }%`,
+                    }}
+                  />
+                  {scrubPreview && (
+                    <div
+                      className="netflix-scrub-bubble"
+                      style={{
+                        left: `${
+                          duration > 0
+                            ? Math.min(94, Math.max(6, (scrubPreview.time / duration) * 100))
+                            : 0
+                        }%`,
+                      }}
+                    >
+                      <span className="bubble-time">{formatTime(scrubPreview.time)}</span>
+                      {scrubPreview.delta !== 0 && (
+                        <span className="bubble-delta">
+                          {scrubPreview.delta > 0
+                            ? `+${Math.round(scrubPreview.delta)}s`
+                            : `${Math.round(scrubPreview.delta)}s`}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
@@ -1371,7 +1484,12 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
                     <button
                       type="button"
                       className={`osd-ctrl-btn ${
-                        isFullScreen && controlFocusIndex === 0 ? 'dpad-focused' : ''
+                        isFullScreen &&
+                        (isVodSeekable && nextEpisode
+                          ? controlFocusIndex === 0
+                          : controlFocusIndex === 0)
+                          ? 'dpad-focused'
+                          : ''
                       }`}
                       onClick={() => stepSeek(-10)}
                       onMouseDown={() => startContinuousSeek(-10)}
@@ -1413,6 +1531,20 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
                       <RotateCw size={18} />
                       <span>+10s</span>
                     </button>
+
+                    {nextEpisode && (
+                      <button
+                        type="button"
+                        className={`osd-ctrl-btn netflix-next-btn ${
+                          isFullScreen && controlFocusIndex === 3 ? 'dpad-focused' : ''
+                        }`}
+                        onClick={handleTriggerNextEpisode}
+                        title="Próximo Episódio (Série)"
+                      >
+                        <SkipForward size={18} fill="currentColor" />
+                        <span>Próximo Ep</span>
+                      </button>
+                    )}
                   </>
                 ) : (
                   <>
@@ -1459,7 +1591,12 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
                 <button
                   type="button"
                   className={`osd-ctrl-btn ${isFavorite ? 'active-fav' : ''} ${
-                    isFullScreen && controlFocusIndex === 3 ? 'dpad-focused' : ''
+                    isFullScreen &&
+                    (isVodSeekable && nextEpisode
+                      ? controlFocusIndex === 4
+                      : controlFocusIndex === 3)
+                      ? 'dpad-focused'
+                      : ''
                   }`}
                   onClick={onToggleFavorite}
                   title="Favoritar Canal (Botão Amarelo / F3)"
@@ -1471,7 +1608,12 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
                 <button
                   type="button"
                   className={`osd-ctrl-btn primary-purple ${
-                    isFullScreen && controlFocusIndex === 4 ? 'dpad-focused' : ''
+                    isFullScreen &&
+                    (isVodSeekable && nextEpisode
+                      ? controlFocusIndex === 5
+                      : controlFocusIndex === 4)
+                      ? 'dpad-focused'
+                      : ''
                   }`}
                   onClick={onToggleFullScreen}
                   title="Lista de Canais (Voltar)"

@@ -1,22 +1,28 @@
 /* ==========================================================================
-   TVPlayer Smart TV - Design System 10-Foot UI Otimizado para Samsung Tizen
-   Preserva a identidade visual do TVPlayerMAUI (#003566 -> #001529, #512BD4)
-   com foco de alto contraste para Controle Remoto e Aceleração de GPU
+   TVPlayer Smart TV - Design System Netflix-Grade UI para Samsung Tizen & LG webOS
+   Estética Cinematográfica Premium: Dark Theme Profundo (#141414),
+   Vermelho Netflix (#E50914), Tipografia Nítida e Scrubbing Fluido a 60fps
    ========================================================================== */
 
 :root {
-  --bg-deep-start: #00284d;
-  --bg-deep-end: #000d1a;
-  --surface-sidebar: rgba(18, 22, 31, 0.96);
-  --surface-card: rgba(36, 43, 58, 0.85);
-  --surface-card-hover: rgba(52, 62, 84, 0.95);
+  --bg-deep-start: #181818;
+  --bg-deep-end: #0c0c0c;
+  --bg-netflix-black: #141414;
+  --bg-netflix-dark: #0a0a0a;
+  --surface-sidebar: rgba(18, 18, 18, 0.96);
+  --surface-card: rgba(28, 28, 28, 0.88);
+  --surface-card-hover: rgba(44, 44, 44, 0.96);
+  --accent-netflix-red: #E50914;
+  --accent-netflix-red-hover: #f40612;
+  --accent-netflix-red-glow: rgba(229, 9, 20, 0.65);
   --accent-maui-purple: #6d3ef2;
   --accent-cyan: #38bdf8;
   --accent-gold: #f4e154;
-  --text-primary: #f8fafc;
-  --text-secondary: #94a3b8;
-  --border-subtle: rgba(255, 255, 255, 0.09);
-  --focus-ring: #38bdf8;
+  --text-primary: #ffffff;
+  --text-secondary: #8c8c8c;
+  --text-muted: #6b7280;
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --focus-ring: #ffffff;
 }
 
 * {
@@ -33,9 +39,9 @@ body,
   width: 100vw;
   height: 100vh;
   overflow: hidden;
-  background: linear-gradient(135deg, var(--bg-deep-start) 0%, var(--bg-deep-end) 100%);
+  background: radial-gradient(circle at 50% 15%, #222222 0%, #141414 55%, #080808 100%);
   color: var(--text-primary);
-  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Oxygen, Ubuntu, sans-serif;
+  font-family: 'Netflix Sans', 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -76,12 +82,14 @@ body,
   width: 52px;
   height: 52px;
   border-radius: 14px;
-  background: linear-gradient(135deg, var(--accent-maui-purple), #2563eb);
+  background: linear-gradient(135deg, var(--accent-netflix-red), #831010);
   display: flex;
   align-items: center;
   justify-content: center;
   color: #fff;
-  box-shadow: 0 6px 18px rgba(109, 62, 242, 0.45);
+  box-shadow: 0 6px 20px rgba(229, 9, 20, 0.5);
+  font-weight: 900;
+  letter-spacing: 0.5px;
 }
 
 .nav-rail-items {
@@ -108,22 +116,22 @@ body,
 }
 
 .nav-rail-btn:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.08);
   color: #fff;
 }
 
 .nav-rail-btn.active {
-  background: rgba(109, 62, 242, 0.22);
+  background: rgba(229, 9, 20, 0.16);
   color: #fff;
-  border-color: rgba(109, 62, 242, 0.55);
+  border-left: 3px solid var(--accent-netflix-red);
 }
 
 .nav-rail-btn.dpad-focused {
-  border-color: var(--focus-ring);
-  background: rgba(56, 189, 248, 0.22);
+  border-color: #ffffff;
+  background: rgba(229, 9, 20, 0.35);
   color: #fff;
-  transform: scale(1.05);
-  box-shadow: 0 0 16px rgba(56, 189, 248, 0.4);
+  transform: scale(1.08);
+  box-shadow: 0 0 20px rgba(229, 9, 20, 0.65);
 }
 
 /* Gaveta Principal de Grupos e Canais */
@@ -289,7 +297,7 @@ body,
   background: var(--surface-card);
   border: 2px solid transparent;
   cursor: pointer;
-  transition: background-color 0.1s ease, border-color 0.1s ease;
+  transition: transform 0.12s ease, background-color 0.12s ease, border-color 0.12s ease;
 }
 
 .tv-list-item:hover {
@@ -297,14 +305,15 @@ body,
 }
 
 .tv-list-item.dpad-focused {
-  background: linear-gradient(90deg, rgba(56, 189, 248, 0.26) 0%, rgba(109, 62, 242, 0.28) 100%);
-  border-color: var(--focus-ring);
-  box-shadow: 0 4px 18px rgba(56, 189, 248, 0.28);
+  background: linear-gradient(90deg, rgba(229, 9, 20, 0.32) 0%, rgba(45, 45, 45, 0.98) 100%);
+  border-color: #ffffff;
+  transform: scale(1.02);
+  box-shadow: 0 6px 22px rgba(229, 9, 20, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.25);
 }
 
 .tv-list-item.now-playing {
-  border-left: 5px solid var(--accent-cyan);
-  background: rgba(56, 189, 248, 0.14);
+  border-left: 5px solid var(--accent-netflix-red);
+  background: rgba(229, 9, 20, 0.18);
 }
 
 .item-icon-box {
@@ -689,15 +698,161 @@ body,
   color: #e2e8f0;
 }
 
-/* Barra Inferior de Controles (Inspirada no VideoControlsOverlay do MainPage.xaml) */
-.tv-osd-bottom {
-  background: rgba(14, 18, 28, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 16px;
-  padding: 16px 22px;
+/* Barra Inferior de Controles Netflix-Grade */
+.tv-osd-bottom,
+.netflix-osd-bottom {
+  background: linear-gradient(180deg, rgba(18, 18, 18, 0.85) 0%, rgba(10, 10, 10, 0.96) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  padding: 18px 24px;
   display: flex;
   flex-direction: column;
   gap: 14px;
+  backdrop-filter: blur(16px);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.75);
+}
+
+/* Timeline Customizada Netflix Ultra-Fluida (GPU Accelerated) */
+.netflix-timeline-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  position: relative;
+}
+
+.netflix-timeline-labels {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.netflix-time-current {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: #ffffff;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.3px;
+}
+
+.netflix-time-remaining {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #a3a3a3;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.3px;
+}
+
+.netflix-timeline-track {
+  position: relative;
+  width: 100%;
+  height: 24px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  contain: layout style;
+}
+
+.netflix-timeline-rail {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+.netflix-timeline-fill {
+  position: absolute;
+  left: 0;
+  height: 5px;
+  background: var(--accent-netflix-red);
+  border-radius: 4px;
+  pointer-events: none;
+  box-shadow: 0 0 10px rgba(229, 9, 20, 0.85);
+  will-change: width;
+}
+
+.netflix-timeline-thumb {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 2.5px solid var(--accent-netflix-red);
+  box-shadow: 0 0 12px rgba(229, 9, 20, 0.95);
+  pointer-events: none;
+  will-change: left;
+}
+
+/* Transição contínua suave no modo de reprodução normal (elimina pulos de 1s) */
+.netflix-timeline-track.is-gliding .netflix-timeline-fill {
+  transition: width 0.35s linear;
+}
+
+.netflix-timeline-track.is-gliding .netflix-timeline-thumb {
+  transition: left 0.35s linear;
+}
+
+/* No seek/scrub ativo: transição instantânea 0ms */
+.netflix-timeline-track.is-scrubbing .netflix-timeline-fill,
+.netflix-timeline-track.is-scrubbing .netflix-timeline-thumb {
+  transition: none !important;
+}
+
+.netflix-timeline-track.is-scrubbing .netflix-timeline-thumb {
+  transform: translate(-50%, -50%) scale(1.35);
+  background: var(--accent-netflix-red);
+  border-color: #ffffff;
+}
+
+/* Balão Flutuante de Scrubbing Estilo Netflix */
+.netflix-scrub-bubble {
+  position: absolute;
+  bottom: 26px;
+  transform: translateX(-50%);
+  background: rgba(18, 18, 18, 0.96);
+  border: 1.5px solid rgba(229, 9, 20, 0.8);
+  border-radius: 8px;
+  padding: 4px 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.9);
+  pointer-events: none;
+  z-index: 50;
+  white-space: nowrap;
+}
+
+.netflix-scrub-bubble::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 5px;
+  border-style: solid;
+  border-color: rgba(229, 9, 20, 0.8) transparent transparent transparent;
+}
+
+.netflix-scrub-bubble .bubble-time {
+  font-size: 13px;
+  font-weight: 800;
+  color: #ffffff;
+  font-variant-numeric: tabular-nums;
+}
+
+.netflix-scrub-bubble .bubble-delta {
+  font-size: 11px;
+  font-weight: 800;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.18);
+  padding: 1px 6px;
+  border-radius: 4px;
 }
 
 .osd-timeline-row {
@@ -713,7 +868,7 @@ body,
 }
 
 .tv-slider {
-  accent-color: var(--accent-maui-purple);
+  accent-color: var(--accent-netflix-red);
   cursor: pointer;
 }
 
@@ -743,7 +898,7 @@ body,
 
 .osd-ctrl-btn {
   background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   color: #fff;
   padding: 9px 16px;
   border-radius: 10px;
@@ -753,17 +908,23 @@ body,
   align-items: center;
   gap: 8px;
   cursor: pointer;
-  transition: background 0.12s ease, transform 0.12s ease;
+  transition: transform 0.12s ease, background-color 0.12s ease, border-color 0.12s ease;
 }
 
 .osd-ctrl-btn:hover {
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.16);
   transform: translateY(-1px);
 }
 
 .osd-ctrl-btn.primary-purple {
-  background: var(--accent-maui-purple);
-  border-color: var(--accent-maui-purple);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.osd-ctrl-btn.netflix-next-btn {
+  background: linear-gradient(135deg, rgba(229, 9, 20, 0.35) 0%, rgba(229, 9, 20, 0.15) 100%);
+  border-color: var(--accent-netflix-red);
+  color: #ffffff;
 }
 
 .osd-ctrl-btn.active-fav {
@@ -772,17 +933,28 @@ body,
 }
 
 .osd-ctrl-btn.play-pause-main {
-  padding: 10px 20px;
-  border: 1.5px solid rgba(56, 189, 248, 0.45);
-  background: rgba(56, 189, 248, 0.12);
+  padding: 10px 22px;
+  border: 1.5px solid rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.12);
 }
 
+/* Foco de Alto Impacto para Controle Remoto nas Smart TVs */
 .osd-ctrl-btn.dpad-focused {
-  background: var(--accent-cyan) !important;
-  color: #06101e !important;
-  border-color: #fff !important;
-  box-shadow: 0 0 22px rgba(56, 189, 248, 0.75) !important;
-  transform: scale(1.08) !important;
+  background: #ffffff !important;
+  color: #0b0b0b !important;
+  border-color: #ffffff !important;
+  box-shadow: 0 0 24px rgba(255, 255, 255, 0.9), 0 0 16px rgba(229, 9, 20, 0.7) !important;
+  transform: scale(1.1) !important;
+}
+
+.osd-ctrl-btn.dpad-focused span {
+  color: #0b0b0b !important;
+  font-weight: 900 !important;
+}
+
+.osd-ctrl-btn.dpad-focused svg {
+  color: #0b0b0b !important;
+  stroke: #0b0b0b !important;
 }
 
 .osd-ctrl-btn.dpad-focused span {
@@ -1729,8 +1901,8 @@ body.avplay-hardware-active .tizen-player-stage,
 .ready-dashboard-card {
   width: 100%;
   max-width: 720px;
-  background: rgba(15, 21, 35, 0.9);
-  border: 1.5px solid rgba(255, 255, 255, 0.14);
+  background: radial-gradient(circle at 50% 20%, rgba(32, 32, 32, 0.95) 0%, rgba(16, 16, 16, 0.98) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 24px;
   padding: 32px 36px;
   display: flex;
@@ -1738,7 +1910,7 @@ body.avplay-hardware-active .tizen-player-stage,
   align-items: center;
   gap: 14px;
   text-align: center;
-  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.75);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.85);
 }
 
 .ready-dashboard-card p {
@@ -1750,14 +1922,14 @@ body.avplay-hardware-active .tizen-player-stage,
   width: 100%;
   max-width: 580px;
   margin: 12px auto 6px;
-  padding: 16px 20px;
-  background: linear-gradient(135deg, rgba(30, 41, 59, 0.75), rgba(15, 23, 42, 0.85));
-  border: 1.5px solid rgba(147, 51, 234, 0.35);
-  border-radius: 16px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  padding: 18px 22px;
+  background: linear-gradient(135deg, rgba(30, 30, 30, 0.95) 0%, rgba(16, 16, 16, 0.98) 100%);
+  border: 1.5px solid rgba(229, 9, 20, 0.4);
+  border-radius: 18px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.8), 0 0 24px rgba(229, 9, 20, 0.25);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   text-align: left;
 }
 
@@ -1770,24 +1942,24 @@ body.avplay-hardware-active .tizen-player-stage,
 
 .resume-pill-badge {
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 900;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   padding: 4px 10px;
-  border-radius: 20px;
-  background: rgba(147, 51, 234, 0.25);
-  color: #c084fc;
-  border: 1px solid rgba(147, 51, 234, 0.45);
+  border-radius: 6px;
+  background: var(--accent-netflix-red);
+  color: #ffffff;
+  box-shadow: 0 2px 10px rgba(229, 9, 20, 0.5);
 }
 
 .resume-pct-pill {
   font-size: 12px;
   font-weight: 700;
-  color: #38bdf8;
-  background: rgba(56, 189, 248, 0.15);
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.12);
   padding: 3px 8px;
   border-radius: 12px;
-  border: 1px solid rgba(56, 189, 248, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .resume-hero-title-wrap {
@@ -1797,8 +1969,8 @@ body.avplay-hardware-active .tizen-player-stage,
 }
 
 .resume-channel-name {
-  font-size: 17px;
-  font-weight: 700;
+  font-size: 18px;
+  font-weight: 800;
   color: #ffffff;
   line-height: 1.3;
   overflow: hidden;
@@ -1807,8 +1979,8 @@ body.avplay-hardware-active .tizen-player-stage,
 }
 
 .resume-series-tag {
-  font-size: 13px;
-  color: #94a3b8;
+  font-size: 13.5px;
+  color: #a3a3a3;
   font-weight: 500;
 }
 
@@ -1822,16 +1994,16 @@ body.avplay-hardware-active .tizen-player-stage,
 .resume-progress-track {
   width: 100%;
   height: 6px;
-  background: rgba(255, 255, 255, 0.12);
-  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 4px;
   overflow: hidden;
 }
 
 .resume-progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #38bdf8, #818cf8);
-  border-radius: 3px;
-  box-shadow: 0 0 8px rgba(56, 189, 248, 0.6);
+  background: var(--accent-netflix-red);
+  border-radius: 4px;
+  box-shadow: 0 0 10px rgba(229, 9, 20, 0.85);
   transition: width 0.3s ease;
 }
 
@@ -1839,34 +2011,40 @@ body.avplay-hardware-active .tizen-player-stage,
   display: flex;
   justify-content: space-between;
   font-size: 12px;
-  color: #94a3b8;
+  color: #a3a3a3;
 }
 
 .resume-time-labels strong {
-  color: #f1f5f9;
+  color: #ffffff;
 }
 
+/* Botão Assistir Netflix-Grade */
 .resume-last-btn {
-  margin-top: 4px;
-  padding: 12px 20px;
+  margin-top: 6px;
+  padding: 13px 22px;
   font-size: 15px;
-  font-weight: 600;
-  border-radius: 12px;
-  background: linear-gradient(135deg, var(--accent-maui-purple), #2563eb);
-  border: 2px solid rgba(255, 255, 255, 0.25);
-  box-shadow: 0 6px 20px rgba(109, 62, 242, 0.45);
+  font-weight: 800;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #0b0b0b;
+  border: none;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
   cursor: pointer;
-  transition: transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease;
+  transition: transform 0.14s ease, box-shadow 0.14s ease;
+}
+
+.resume-last-btn svg {
+  color: #0b0b0b;
+  fill: #0b0b0b;
 }
 
 .resume-last-btn.dpad-focused {
-  border-color: var(--focus-ring);
-  transform: scale(1.04);
-  box-shadow: 0 0 28px rgba(56, 189, 248, 0.75);
+  transform: scale(1.05);
+  box-shadow: 0 0 32px rgba(255, 255, 255, 0.95), 0 0 20px rgba(229, 9, 20, 0.7);
 }
 
 .series-folder-item {
@@ -2031,17 +2209,18 @@ body.avplay-hardware-active .tizen-player-stage,
 
 .item-playback-progress-track {
   width: 100%;
-  height: 3.5px;
-  background: rgba(255, 255, 255, 0.12);
-  border-radius: 3px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 4px;
   overflow: hidden;
   margin-top: 4px;
 }
 
 .item-playback-progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #ef4444 0%, #f97316 100%);
-  border-radius: 3px;
+  background: var(--accent-netflix-red);
+  border-radius: 4px;
+  box-shadow: 0 0 8px rgba(229, 9, 20, 0.8);
   transition: width 0.3s ease;
 }
 
@@ -2118,11 +2297,11 @@ body.avplay-hardware-active .tizen-player-stage,
   bottom: 96px;
   right: 32px;
   z-index: 1000;
-  background: linear-gradient(135deg, rgba(15, 23, 42, 0.94), rgba(30, 41, 59, 0.96));
-  border: 2px solid var(--accent-maui-purple);
+  background: linear-gradient(135deg, rgba(24, 24, 24, 0.96), rgba(12, 12, 12, 0.98));
+  border: 2px solid var(--accent-netflix-red);
   border-radius: 16px;
   padding: 16px 20px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.8), 0 0 24px rgba(109, 62, 242, 0.45);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.9), 0 0 30px rgba(229, 9, 20, 0.45);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -2130,6 +2309,7 @@ body.avplay-hardware-active .tizen-player-stage,
   max-width: 440px;
   animation: slideInRightPrompt 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   pointer-events: auto;
+  backdrop-filter: blur(12px);
 }
 
 @keyframes slideInRightPrompt {
@@ -2152,26 +2332,26 @@ body.avplay-hardware-active .tizen-player-stage,
 
 .next-ep-badge {
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 900;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #38bdf8;
-  background: rgba(56, 189, 248, 0.15);
+  color: #ffffff;
+  background: var(--accent-netflix-red);
   padding: 3px 8px;
-  border-radius: 6px;
-  border: 1px solid rgba(56, 189, 248, 0.3);
+  border-radius: 4px;
+  box-shadow: 0 2px 10px rgba(229, 9, 20, 0.6);
 }
 
 .next-ep-tag {
   font-size: 12px;
   font-weight: 700;
-  color: #c084fc;
+  color: #e5e5e5;
 }
 
 .next-ep-title {
   font-size: 15px;
-  font-weight: 600;
-  color: #f8fafc;
+  font-weight: 700;
+  color: #ffffff;
   line-height: 1.35;
   white-space: nowrap;
   overflow: hidden;
@@ -2185,27 +2365,31 @@ body.avplay-hardware-active .tizen-player-stage,
   gap: 10px;
   padding: 12px 18px;
   font-size: 14px;
-  font-weight: 700;
-  border-radius: 10px;
-  background: linear-gradient(135deg, var(--accent-maui-purple), #2563eb);
-  color: #fff;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  box-shadow: 0 4px 16px rgba(109, 62, 242, 0.5);
+  font-weight: 800;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #0b0b0b;
+  border: none;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6);
   cursor: pointer;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
+.next-ep-action-btn svg {
+  color: #0b0b0b;
+  fill: #0b0b0b;
+}
+
 .next-ep-action-btn:hover,
 .next-ep-action-btn:focus {
-  transform: scale(1.03);
-  box-shadow: 0 0 24px rgba(56, 189, 248, 0.8);
-  border-color: var(--focus-ring);
+  transform: scale(1.04);
+  box-shadow: 0 0 30px rgba(255, 255, 255, 0.9), 0 0 20px rgba(229, 9, 20, 0.7);
 }
 
 .osd-badge.vod {
-  background: rgba(147, 51, 234, 0.25);
-  color: #c084fc;
-  border: 1px solid rgba(147, 51, 234, 0.45);
+  background: rgba(229, 9, 20, 0.25);
+  color: #ff858d;
+  border: 1px solid rgba(229, 9, 20, 0.5);
 }
 
 
