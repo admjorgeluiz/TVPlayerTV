@@ -478,6 +478,7 @@ body,
   justify-content: center;
   cursor: pointer;
   transition: all 0.2s ease;
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
 }
 
@@ -651,6 +652,7 @@ body,
   border: 1px solid rgba(255, 255, 255, 0.15);
   padding: 12px 20px;
   border-radius: 14px;
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
 }
 
@@ -726,6 +728,7 @@ body,
   display: flex;
   flex-direction: column;
   gap: 10px;
+  -webkit-backdrop-filter: blur(18px);
   backdrop-filter: blur(18px);
   box-shadow: 0 16px 45px rgba(0, 0, 0, 0.75);
 }
@@ -983,6 +986,7 @@ body,
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.82);
+  -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
@@ -2243,6 +2247,7 @@ body.avplay-hardware-active .tizen-player-stage,
   right: 24px;
   z-index: 99;
   background: rgba(15, 23, 42, 0.94);
+  -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
   border: 1.5px solid rgba(56, 189, 248, 0.45);
   border-radius: 14px;
@@ -2321,6 +2326,7 @@ body.avplay-hardware-active .tizen-player-stage,
   max-width: 440px;
   animation: slideInRightPrompt 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   pointer-events: auto;
+  -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
 }
 

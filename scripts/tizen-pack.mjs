@@ -4,9 +4,40 @@ import { execSync } from 'node:child_process';
 
 const distDir = path.resolve(process.cwd(), 'dist');
 const shouldDeploy = process.argv.includes('--deploy');
-const tvIp = process.env.TV_IP || '192.168.68.117';
-const certProfile = process.env.TIZEN_PROFILE || 'TVSamsungSala';
+const tvIp = process.env.TV_IP || '192.168.68.108';
+const certProfile = process.env.TIZEN_PROFILE || 'TVSamsungSalaParque';
 const appId = 'TVPlayer01.TVPlayerTizen';
+
+// 1. Adapta dist/index.html para execução local no Tizen 6.0+ (Chromium 76+)
+const indexPath = path.join(distDir, 'index.html');
+if (fs.existsSync(indexPath)) {
+  let html = fs.readFileSync(indexPath, 'utf-8');
+
+  // Remove type="module" e crossorigin para permitir execução direta do bundle moderno via file:/// (com defer para garantir que o #root já exista no DOM)
+  html = html.replace(/<script\s+type="module"\s+crossorigin\s+src="([^"]+)"><\/script>/gi, '<script defer src="$1"></script>');
+  html = html.replace(/<script\s+type="module"\s+src="([^"]+)"><\/script>/gi, '<script defer src="$1"></script>');
+  html = html.replace(/<link\s+rel="stylesheet"\s+crossorigin\s+href="([^"]+)">/gi, '<link rel="stylesheet" href="$1">');
+
+  // Adiciona interceptor de erros amigável em caso de falha de renderização
+  if (!html.includes('id="tizen-error-guard"')) {
+    const errorGuard = `
+    <script id="tizen-error-guard">
+      window.addEventListener('error', function(e) {
+        var root = document.getElementById('root');
+        if (root && (!root.children || root.children.length === 0)) {
+          var errBox = document.createElement('div');
+          errBox.style = 'color: #ff5555; background: #0b0f17; border: 2px solid #ef4444; padding: 24px; font-family: monospace; font-size: 16px; z-index: 99999; position: fixed; top: 20px; left: 20px; right: 20px; border-radius: 12px;';
+          errBox.innerHTML = '<h3 style="color:#ef4444;margin-bottom:10px;">⚠️ Erro de Carregamento:</h3><pre style="white-space:pre-wrap;">' + (e.message || e) + '\\n' + (e.filename || '') + ':' + (e.lineno || '') + '</pre>';
+          root.appendChild(errBox);
+        }
+      });
+    </script>`;
+    html = html.replace('</body>', `${errorGuard}\n  </body>`);
+  }
+
+  fs.writeFileSync(indexPath, html, 'utf-8');
+  console.log('✅ dist/index.html adaptado para execução moderna e rápida em Tizen 6.0+ (sem CORS em file://)');
+}
 
 const dotProjectXml = `<?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
@@ -33,7 +64,7 @@ const dotTprojectXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <tproject xmlns="http://www.tizen.org/tproject">
     <platforms>
         <platform>
-            <name>tv-samsung-8.0</name>
+            <name>tv-samsung-6.0</name>
         </platform>
     </platforms>
     <package>
@@ -44,7 +75,7 @@ const dotTprojectXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 fs.writeFileSync(path.join(distDir, '.project'), dotProjectXml, 'utf-8');
 fs.writeFileSync(path.join(distDir, '.tproject'), dotTprojectXml, 'utf-8');
 
-console.log('\n✅ Arquivos de manifesto Samsung Tizen (.project, .tproject, config.xml) preparados em ./dist');
+console.log('\n✅ Arquivos de manifesto Samsung Tizen (.project, .tproject, config.xml para Tizen 6.0+) preparados em ./dist');
 
 const tizenCliPath = 'C:\\tizen-studio\\tools\\ide\\bin\\tizen.bat';
 const sdbPath = 'C:\\tizen-studio\\tools\\sdb.exe';
@@ -52,7 +83,7 @@ const sdbPath = 'C:\\tizen-studio\\tools\\sdb.exe';
 if (fs.existsSync(tizenCliPath)) {
   // Remove arquivos .ipk (LG) de ./dist antes de gerar o .wgt (Samsung) para não duplicar tamanho
   for (const f of fs.readdirSync(distDir)) {
-    if (f.endsWith('.ipk')) {
+    if (f.endsWith('.ipk') || f.endsWith('.wgt')) {
       fs.unlinkSync(path.join(distDir, f));
     }
   }
@@ -68,7 +99,11 @@ if (fs.existsSync(tizenCliPath)) {
     const remoteWgtPath = '/home/owner/share/tmp/sdk_tools/tmp/TVPlayerTizen.wgt';
 
     console.log(`\n📺 Conectando à TV Samsung em ${tvIp}...`);
-    execSync(`"${sdbPath}" connect ${tvIp}`, { stdio: 'inherit' });
+    try {
+      execSync(`"${sdbPath}" connect ${tvIp}`, { stdio: 'inherit' });
+    } catch (e) {
+      console.warn('Conexão SDB já ativa ou respondeu com aviso.');
+    }
 
     console.log('🚀 Enviando pacote para a TV...');
     execSync(`"${sdbPath}" push "${localWgtPath}" ${remoteWgtPath}`, { stdio: 'inherit' });

@@ -374,13 +374,26 @@ function tvPairingServerPlugin(): Plugin {
 
 export default defineConfig({
   base: './',
-  plugins: [react(), tvPairingServerPlugin()],
+  plugins: [
+    react(),
+    tvPairingServerPlugin(),
+  ],
   build: {
-    target: ['es2018', 'chrome69'],
+    target: ['es2019', 'chrome76'],
     outDir: 'dist',
     assetsDir: 'assets',
     sourcemap: false,
     minify: 'esbuild',
+    cssCodeSplit: false,
+    rollupOptions: {
+      output: {
+        format: 'iife',
+        name: 'TVPlayerApp',
+        inlineDynamicImports: true,
+        entryFileNames: 'assets/[name].js',
+        assetFileNames: 'assets/[name].[ext]',
+      },
+    },
   },
   server: {
     host: true,
