@@ -20,6 +20,7 @@ import {
   Sparkles,
   SkipForward,
   SkipBack,
+  PictureInPicture2,
 } from 'lucide-react';
 import { Channel, PlaybackProgress, PlayerEngineMode } from '../types/iptv';
 import { isTizenTV, isWebOSTV, tizenAVPlay } from '../services/tizenBridge';
@@ -35,6 +36,7 @@ export interface VideoPlayerRef {
   isOsdVisible: () => boolean;
   isVod: () => boolean;
   handleDpadNavigation: (key: string) => boolean;
+  togglePictureInPicture: () => Promise<void>;
 }
 
 interface VideoPlayerProps {
@@ -920,10 +922,28 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
     };
   }, []);
 
+  const handleTogglePiP = useCallback(async () => {
+    try {
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+      } else if (videoRef.current && 'requestPictureInPicture' in videoRef.current) {
+        await (videoRef.current as any).requestPictureInPicture();
+      } else if ((window as any).electronAPI?.togglePip) {
+        await (window as any).electronAPI.togglePip();
+      }
+    } catch (err) {
+      console.warn('[PiP] Falha no Picture-in-Picture nativo, alternando modo janela Electron:', err);
+      if ((window as any).electronAPI?.togglePip) {
+        await (window as any).electronAPI.togglePip();
+      }
+    }
+  }, []);
+
   useImperativeHandle(
     ref,
     () => ({
       togglePlayPause: handleTogglePlayPause,
+      togglePictureInPicture: handleTogglePiP,
       seekDelta: (delta: number) => {
         stepSeek(delta);
         triggerOsd(4000);
@@ -1678,6 +1698,14 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>((
               </div>
 
               <div className="osd-controls-right">
+                <button
+                  type="button"
+                  className="osd-ctrl-btn icon-only"
+                  onClick={handleTogglePiP}
+                  title="Picture-in-Picture / Mini Player Flutuante"
+                >
+                  <PictureInPicture2 size={18} />
+                </button>
                 <button
                   type="button"
                   className="osd-ctrl-btn icon-only"

@@ -11,6 +11,7 @@ import {
   ListVideo,
   Lock,
   Maximize2,
+  PictureInPicture2,
   QrCode,
   RefreshCw,
   Search,
@@ -60,6 +61,8 @@ import { PlaylistModal } from './components/PlaylistModal';
 import { MobileRemoteSetup } from './components/MobileRemoteSetup';
 import { DesktopInstallGate } from './components/DesktopInstallGate';
 import { ParentalPinModal, PinModalMode } from './components/ParentalPinModal';
+import { UpdateModal } from './components/UpdateModal';
+import { checkAppUpdates, UpdateInfo, CURRENT_APP_VERSION } from './services/updateService';
 
 type FocusZone =
   | 'nav_rail'
@@ -159,6 +162,11 @@ export function App() {
   const [confirmExitToast, setConfirmExitToast] = useState<boolean>(false);
   const [settingsFeedback, setSettingsFeedback] = useState<string | null>(null);
 
+  // Estados de Atualização (Auto-Updater)
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState<boolean>(false);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState<boolean>(false);
+
   // Estado do Modal de Controle Parental (Verificação ou Alteração de Senha)
   const [pinRequest, setPinRequest] = useState<{
     mode?: PinModalMode;
@@ -188,6 +196,35 @@ export function App() {
       initTizenTV();
     }
   }, [remotePairParam]);
+
+  // Checagem silenciosa de novas versões 4s após a inicialização
+  useEffect(() => {
+    const timer = window.setTimeout(async () => {
+      try {
+        const info = await checkAppUpdates();
+        setUpdateInfo(info);
+        if (info.hasUpdate) {
+          setIsUpdateModalOpen(true);
+        }
+      } catch (err) {
+        console.warn('[AutoUpdater] Verificação de inicialização ignorada:', err);
+      }
+    }, 4500);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  const handleManualCheckUpdate = useCallback(async () => {
+    setIsCheckingUpdate(true);
+    setIsUpdateModalOpen(true);
+    try {
+      const info = await checkAppUpdates();
+      setUpdateInfo(info);
+    } catch (err) {
+      console.error('[AutoUpdater] Falha ao verificar atualizações:', err);
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  }, []);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -1128,7 +1165,7 @@ export function App() {
 
       const currentListLength =
         activeTab === 'settings'
-          ? 4
+          ? 5
           : allChannels.length === 0
           ? 2
           : isShowingGroups
@@ -1275,6 +1312,8 @@ export function App() {
               handleSwitchEngineMode();
             } else if (listFocusIndex === 3) {
               setIsModalOpen(true);
+            } else if (listFocusIndex === 4) {
+              handleManualCheckUpdate();
             }
             return;
           }
@@ -1619,6 +1658,36 @@ export function App() {
                     )}
                   </button>
 
+                  <button
+                    type="button"
+                    className={`tv-list-item settings-option-card ${
+                      focusZone === 'list' && listFocusIndex === 4 ? 'dpad-focused' : ''
+                    }`}
+                    onMouseEnter={() => {
+                      setFocusZone('list');
+                      setListFocusIndex(4);
+                    }}
+                    onClick={handleManualCheckUpdate}
+                  >
+                    <div className="item-icon-box">
+                      <Sparkles size={20} color="#f4e154" />
+                    </div>
+                    <div className="item-text-col">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span className="item-title">Atualizações do Sistema</span>
+                        <span className="badge-18plus active" style={{ background: '#2563eb' }}>
+                          v{CURRENT_APP_VERSION}
+                        </span>
+                      </div>
+                      <span className="item-subtitle">
+                        Verificar novas versões e novidades no GitHub Releases
+                      </span>
+                    </div>
+                    {focusZone === 'list' && listFocusIndex === 4 && (
+                      <span className="dpad-ok-pill">Verificar</span>
+                    )}
+                  </button>
+
                   <div className="settings-security-note">
                     <Lock size={15} />
                     <span>
@@ -1735,17 +1804,29 @@ export function App() {
 
       <main className="tizen-player-stage">
         {!isFullScreen && selectedChannel && (
-          <button
-            type="button"
-            className="floating-fullscreen-btn"
-            onClick={() => {
-              setIsFullScreen(true);
-              setFocusZone('fullscreen_player');
-            }}
-            title="Expandir Vídeo em Tela Cheia (Botão Vermelho / F1)"
-          >
-            <Maximize2 size={18} />
-          </button>
+          <div className="floating-player-actions">
+            <button
+              type="button"
+              className="floating-action-btn"
+              onClick={() => {
+                setIsFullScreen(true);
+                setFocusZone('fullscreen_player');
+              }}
+              title="Expandir Vídeo em Tela Cheia (Botão Vermelho / F1)"
+            >
+              <Maximize2 size={18} />
+            </button>
+            <button
+              type="button"
+              className="floating-action-btn pip-btn"
+              onClick={() => {
+                playerRef.current?.togglePictureInPicture();
+              }}
+              title="Picture-in-Picture / Mini Player Flutuante"
+            >
+              <PictureInPicture2 size={18} />
+            </button>
+          </div>
         )}
 
         <VideoPlayer
@@ -1830,6 +1911,13 @@ export function App() {
         targetTitle={pinRequest?.title || 'Conteúdo Restrito'}
         onSuccess={() => pinRequest?.onVerified()}
         onCancel={() => setPinRequest(null)}
+      />
+
+      <UpdateModal
+        isOpen={isUpdateModalOpen}
+        onClose={() => setIsUpdateModalOpen(false)}
+        updateInfo={updateInfo}
+        isChecking={isCheckingUpdate}
       />
     </div>
     </DesktopInstallGate>
