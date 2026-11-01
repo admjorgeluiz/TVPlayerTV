@@ -2,7 +2,7 @@
 ; Substitui e desinstala versoes antigas automaticamente
 
 #define MyAppName "TVPlayer"
-#define MyAppVersion "1.6.0"
+#define MyAppVersion "2.0.0"
 #define MyAppPublisher "Jorge Nascimento"
 #define MyAppURL "https://github.com/admjorgeluiz/TVPlayerMAUI"
 #define MyAppExeName "TVPlayer.exe"
@@ -20,7 +20,7 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 OutputDir=releases
-OutputBaseFilename=setupTVPlayer_v1.6
+OutputBaseFilename=setupTVPlayer_v2.0
 SetupIconFile=public\icon.ico
 Compression=lzma2/ultra64
 SolidCompression=yes

@@ -156,10 +156,10 @@ O TVPlayer gera um executável instalador nativo do Windows com desinstalação 
 # Executar em modo desenvolvimento no Windows
 npm run electron:dev
 
-# Compilar e gerar o instalador completo .exe (setupTVPlayer_v1.6.exe) via Inno Setup
+# Compilar e gerar o instalador completo .exe (setupTVPlayer_v2.0.exe) via Inno Setup
 npm run electron:pack
 ```
-O instalador final é salvo em `./releases/setupTVPlayer_v1.6.exe`.
+O instalador final é salvo em `./releases/setupTVPlayer_v2.0.exe`.
 
 ---
 

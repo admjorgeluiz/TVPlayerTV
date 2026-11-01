@@ -1,7 +1,7 @@
 {
   "name": "tvplayer-tizen",
-  "version": "1.0.0",
-  "description": "TVPlayer Smart TV - IPTV Player Híbrido Otimizado para Samsung Tizen, LG webOS e Desktop",
+  "version": "2.0.0",
+  "description": "TVPlayer Smart TV & Desktop - IPTV Player Híbrido Otimizado para Samsung Tizen, LG webOS e Desktop",
   "license": "MIT",
   "type": "module",
   "main": "electron/main.cjs",

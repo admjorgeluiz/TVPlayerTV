@@ -36,7 +36,7 @@ console.log(`\n⚙️ 2/2: Empacotando com Inno Setup via: ${isccPath}`);
 const issFile = path.join(projectDir, 'installer.iss');
 execSync(`"${isccPath}" "${issFile}"`, { stdio: 'inherit' });
 
-const finalSetup = path.join(releasesDir, 'setupTVPlayer_v1.6.exe');
+const finalSetup = path.join(releasesDir, 'setupTVPlayer_v2.0.exe');
 if (fs.existsSync(finalSetup)) {
   const stats = fs.statSync(finalSetup);
   const sizeMb = (stats.size / (1024 * 1024)).toFixed(2);
