@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Download, Monitor, Sparkles, ArrowRight, Laptop, CheckCircle2 } from 'lucide-react';
-import { isSmartTV, isInstalledPWA } from '../services/tizenBridge';
+import { isSmartTV, isInstalledPWA, isElectronApp } from '../services/tizenBridge';
 
 interface DesktopInstallGateProps {
   children: React.ReactNode;
@@ -102,8 +102,8 @@ export const DesktopInstallGate: React.FC<DesktopInstallGateProps> = ({ children
     }
   };
 
-  // Se for TV, PWA Standalone ou liberado pelo usuário, renderiza o App
-  if (isTV || isStandalone || bypassed) {
+  // Se for TV, Electron Desktop Nativo, PWA Standalone ou liberado pelo usuário, renderiza o App
+  if (isTV || isStandalone || isElectronApp() || bypassed) {
     return <>{children}</>;
   }
 

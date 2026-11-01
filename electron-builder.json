@@ -1,0 +1,25 @@
+{
+  "appId": "com.jorgenascimento.tvplayer",
+  "productName": "TVPlayer",
+  "directories": {
+    "output": "dist-electron"
+  },
+  "files": [
+    "dist/**/*",
+    "electron/**/*",
+    "public/**/*",
+    "package.json"
+  ],
+  "extraMetadata": {
+    "main": "electron/main.cjs"
+  },
+  "win": {
+    "icon": "public/icon.ico",
+    "target": [
+      {
+        "target": "dir",
+        "arch": ["x64"]
+      }
+    ]
+  }
+}

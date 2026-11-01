@@ -114,6 +114,14 @@ export function isWebOSTV(): boolean {
   return /Web0S|webOS|SmartTV.*LG|NetCast/i.test(ua);
 }
 
+export function isElectronApp(): boolean {
+  if (typeof window === 'undefined') return false;
+  return Boolean(
+    (window as any).electronAPI?.isElectron ||
+    navigator?.userAgent?.includes('Electron')
+  );
+}
+
 export function isSmartTV(): boolean {
   if (isTizenTV() || isWebOSTV()) return true;
   if (typeof window === 'undefined') return false;

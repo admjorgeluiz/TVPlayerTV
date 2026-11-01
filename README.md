@@ -147,13 +147,28 @@ npm run lg:deploy
 
 ---
 
-### 5. Execução como Aplicativo Desktop no PC (Windows / PWA)
+### 5. Compilação para Windows Desktop (Electron & Inno Setup)
 
-O TVPlayer possui suporte total a **PWA (Progressive Web App)**:
-1. Inicie o servidor local: `npm run dev`
-2. No Google Chrome ou Microsoft Edge, acesse: **`http://localhost:5173/`**
-3. Clique no botão **"Instalar TVPlayer no Computador"** ou no ícone **🖥️** na barra de endereços (URL).
-4. O app será instalado no Windows e poderá ser iniciado pelo Menu Iniciar ou Barra de Tarefas em janela própria, com aceleração de GPU e tela cheia.
+O TVPlayer gera um executável instalador nativo do Windows com desinstalação automática da versão legada anterior:
+
+#### Comandos:
+```bash
+# Executar em modo desenvolvimento no Windows
+npm run electron:dev
+
+# Compilar e gerar o instalador completo .exe (setupTVPlayer_v1.6.exe) via Inno Setup
+npm run electron:pack
+```
+O instalador final é salvo em `./releases/setupTVPlayer_v1.6.exe`.
+
+---
+
+### 6. Execução como PWA no Navegador
+
+O TVPlayer também suporta instalação leve via navegador:
+1. Inicie o servidor: `npm run dev`
+2. No Chrome ou Edge, acesse: **`http://localhost:5173/`**
+3. Clique em **"Instalar TVPlayer no Computador"** para rodar em janela independente.
 
 ---
 

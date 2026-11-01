@@ -3,9 +3,11 @@ node_modules/
 
 # Production builds
 dist/
+dist-electron/
 releases/
 *.wgt
 *.ipk
+*.exe
 
 # TypeScript build info
 *.tsbuildinfo
@@ -19,6 +21,7 @@ releases/
 # IDE & Editor files
 .vscode/
 .idea/
+workspace/
 *.suo
 *.ntvs*
 *.njsproj
